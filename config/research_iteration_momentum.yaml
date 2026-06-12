@@ -1,0 +1,27 @@
+iteration:
+  name: iteration_004_momentum_switch
+  output_dir: reports/research_iterations/iteration_004_momentum_switch
+
+execution:
+  base_timeframe: 5m
+  signal_timeframe: 1h
+  max_position_pct: 0.50
+  fee_rate: 0.0004
+  slippage_bps: 2
+  max_total_loss_pct: 0.20
+  max_drawdown_constraint: -0.20
+
+search:
+  rsi_windows: [14, 24, 48]
+  rsi_threshold_pairs:
+    - [30, 70]
+    - [35, 65]
+    - [40, 60]
+  ema_fast_windows: [10, 20, 30, 50, 100]
+  ema_slow_windows: [100, 150, 200, 300, 500]
+  include_long_short: true
+  include_long_only: true
+
+selection:
+  primary_metric: total_return
+  tie_breakers: [max_drawdown, trades]

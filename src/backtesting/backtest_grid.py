@@ -36,6 +36,7 @@ def run_grid_backtest(
     constant_size: bool = False,
     take_profit_spacing_multiplier: float = 0.5,
     survival_min_realized_pnl: float | None = None,
+    side: str = "long",
 ) -> BacktestResult:
     if allow_open is None:
         allow_open = pd.Series(True, index=market.index)
@@ -70,6 +71,7 @@ def run_grid_backtest(
             add_level_min_score=add_level_min_score,
             take_profit_spacing_multiplier=take_profit_spacing_multiplier,
             survival_min_realized_pnl=survival_min_realized_pnl,
+            side=side,
         )
         rows.append(result.to_dict())
         i = market.index.get_loc(result.exit_timestamp) + 1

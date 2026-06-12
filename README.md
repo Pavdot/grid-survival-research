@@ -39,6 +39,18 @@ Economy-first grid calibration:
 python -m src.research.economy_first_research
 ```
 
+Directional grid research:
+
+```powershell
+python -m src.research.directional_grid_research
+```
+
+Momentum switch research:
+
+```powershell
+python -m src.research.momentum_switch_research
+```
+
 Both write local research outputs under `reports/research_iterations/`, which
 is ignored by Git except for the directory placeholder.
 

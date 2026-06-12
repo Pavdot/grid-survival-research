@@ -1,0 +1,20 @@
+iteration:
+  name: iteration_003_directional_grid
+  output_dir: reports/research_iterations/iteration_003_directional_grid
+
+search:
+  sides: [long, short]
+  take_profit_spacing_multipliers: [1.0, 2.0, 3.0]
+  spacing_atr_multipliers: [2.0, 4.0, 6.0]
+  max_levels: [1, 2]
+  stop_on_regime_break: [true, false]
+  stop_on_volatility_shock: [true]
+  survival_min_net_profit_pcts: [0.0]
+  search_entry_stride_bars: 72
+  max_positions_per_split: 200
+  min_grid_fraction_baseline: 0.05
+  min_grid_absolute_cap: 50
+
+selection:
+  primary_metric: expectancy
+  tie_breakers: [profit_factor, max_drawdown, number_of_forced_exits]

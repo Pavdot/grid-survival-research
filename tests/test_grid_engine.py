@@ -66,6 +66,40 @@ class GridEngineTests(unittest.TestCase):
         self.assertGreaterEqual(result.number_of_levels_filled, 1)
         self.assertLessEqual(result.max_exposure_pct, risk.max_total_exposure_pct)
 
+    def test_short_grid_can_take_profit_when_price_falls(self) -> None:
+        config = base_config()
+        config["grid"]["max_levels"] = 1
+        config["grid"]["base_position_size_pct"] = 0.10
+        config["grid"]["sizing_sequence"] = [1.0]
+        config["risk"]["max_holding_hours"] = 1
+        risk = validate_strategy_config(config)
+        index = pd.date_range("2024-01-01 00:05:00Z", periods=12, freq="5min")
+        close = pd.Series([100, 99.5, 99.0, 98.5, 98.0, 98.0, 98.0, 98.0, 98.0, 98.0, 98.0, 98.0], index=index)
+        market = pd.DataFrame(
+            {
+                "open": close,
+                "high": close + 0.1,
+                "low": close - 0.5,
+                "close": close,
+                "volume": 1,
+                "atr_5m": 1.0,
+                "breakout_risk": 0,
+                "volatility_shock": 0,
+            },
+            index=index,
+        )
+        result = simulate_grid_from_index(
+            market,
+            0,
+            risk,
+            side="short",
+            take_profit_spacing_multiplier=1.0,
+            survival_min_realized_pnl=0.0,
+        )
+        self.assertEqual(result.side, "short")
+        self.assertEqual(result.exit_reason, "take_profit")
+        self.assertGreater(result.realized_pnl, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
