@@ -1,0 +1,47 @@
+iteration:
+  name: iteration_006_walk_forward_martingale
+  output_dir: reports/research_iterations/iteration_006_walk_forward_martingale
+
+target:
+  monthly_return: 0.20
+  max_drawdown: -0.35
+  min_exact_grids: 25
+  min_positive_fold_rate: 0.60
+  min_target_fold_rate: 0.60
+
+walk_forward:
+  train_days: 180
+  test_days: 30
+  step_days: 30
+  embargo_bars: 0
+
+search:
+  side_modes: [mean_reversion_dual]
+  rsi_windows: [24]
+  rsi_threshold_pairs:
+    - [40, 60]
+  entry_modes: [hourly_extreme]
+  entry_cooldown_hours: [3]
+  spacing_atr_multipliers: [3.00, 4.50, 6.00]
+  take_profit_spacing_multipliers: [2.00, 3.00]
+  max_levels: [5]
+  base_position_size_pcts: [2.00, 2.50, 3.00]
+  progression_multipliers: [1.55]
+  max_total_exposure_pcts: [30.00, 40.00, 50.00]
+  max_notional_exposure_pct: 50.00
+  max_grid_loss_pcts: [0.35]
+  max_holding_hours: [6]
+  stop_on_regime_break: [false]
+  stop_on_volatility_shock: [true]
+  fee_rates: [0.0001, 0.0002]
+  slippage_bps_values: [0]
+  max_progression_multiplier: 1.75
+  candidate_sample_size: 200
+  candidate_sample_seed: 42
+  search_entry_stride_bars: 24
+  max_sample_positions_per_candidate: 30
+  exact_top_n: 25
+
+selection:
+  primary_metric: monthly_return
+  tie_breakers: [max_drawdown, profit_factor, number_of_forced_exits]

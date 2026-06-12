@@ -57,6 +57,12 @@ Monthly target bounded martingale grid research:
 python -m src.research.monthly_target_martingale_research
 ```
 
+Walk-forward martingale research:
+
+```powershell
+python -m src.research.walk_forward_martingale_research
+```
+
 All research iterations write local outputs under `reports/research_iterations/`, which
 is ignored by Git except for the directory placeholder.
 
