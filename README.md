@@ -51,7 +51,13 @@ Momentum switch research:
 python -m src.research.momentum_switch_research
 ```
 
-Both write local research outputs under `reports/research_iterations/`, which
+Monthly target bounded martingale grid research:
+
+```powershell
+python -m src.research.monthly_target_martingale_research
+```
+
+All research iterations write local outputs under `reports/research_iterations/`, which
 is ignored by Git except for the directory placeholder.
 
 ## Outputs
