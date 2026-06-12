@@ -1,0 +1,28 @@
+iteration:
+  name: iteration_001_ml_first
+  output_dir: reports/research_iterations/iteration_001_ml_first
+
+threshold_search:
+  open_threshold_start: 0.50
+  open_threshold_stop: 0.95
+  threshold_step: 0.05
+  minimum_add_threshold_floor: 0.60
+  kill_switch_thresholds: [null, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60]
+  min_grid_fraction_baseline: 0.05
+  min_grid_absolute_cap: 500
+
+selection:
+  primary_metric: expectancy
+  tie_breakers: [max_drawdown, number_of_forced_exits]
+
+diagnostics:
+  score_deciles: 10
+  worst_pnl_quantile: 0.10
+
+permutation_importance:
+  enabled: true
+  sample_rows: 5000
+  n_repeats: 3
+  scoring: average_precision
+  random_state: 42
+

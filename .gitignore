@@ -21,4 +21,5 @@ reports/backtests/*
 !reports/backtests/.gitkeep
 reports/model_reports/*
 !reports/model_reports/.gitkeep
-
+reports/research_iterations/*
+!reports/research_iterations/.gitkeep
