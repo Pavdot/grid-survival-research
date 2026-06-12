@@ -1,0 +1,31 @@
+project:
+  name: grid-survival-research
+  timezone: UTC
+  random_seed: 42
+
+paths:
+  local_kline_json: ../btcusdt_5m_klines_long.json
+  processed_dir: data/processed
+  features_dir: data/features
+  labels_dir: data/labels
+  figures_dir: reports/figures
+  backtests_dir: reports/backtests
+  model_reports_dir: reports/model_reports
+
+data:
+  symbol: BTCUSDT
+  base_timeframe: 5m
+  higher_timeframes: [15m, 30m, 1h]
+
+validation:
+  train_fraction: 0.60
+  validation_fraction: 0.20
+  test_fraction: 0.20
+  embargo_bars: 144
+  walk_forward_train_bars: 12000
+  walk_forward_test_bars: 3000
+  walk_forward_step_bars: 3000
+
+run:
+  default_limit: null
+

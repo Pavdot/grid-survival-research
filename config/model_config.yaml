@@ -1,0 +1,28 @@
+features:
+  min_non_null_fraction: 0.90
+  drop_columns: []
+
+models:
+  threshold: 0.70
+  random_state: 42
+  logistic_regression:
+    max_iter: 2000
+    class_weight: balanced
+  random_forest:
+    n_estimators: 300
+    max_depth: 8
+    min_samples_leaf: 20
+    class_weight: balanced_subsample
+  decision_tree:
+    max_depth: 3
+    min_samples_leaf: 50
+    class_weight: balanced
+  boosted_tree:
+    max_iter: 300
+    max_leaf_nodes: 31
+    learning_rate: 0.05
+
+dangerous_case:
+  max_adverse_excursion_threshold: 0.006
+  unrealized_drawdown_threshold: 0.008
+

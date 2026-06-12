@@ -1,0 +1,2 @@
+"""Report and chart generation."""
+

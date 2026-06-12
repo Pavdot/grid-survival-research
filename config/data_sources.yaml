@@ -1,0 +1,15 @@
+binance:
+  market: futures
+  base_url: https://fapi.binance.com
+  klines_endpoint: /fapi/v1/klines
+  symbol: BTCUSDT
+  interval: 5m
+  limit: 1500
+  request_sleep_seconds: 0.25
+
+future_optional_sources:
+  funding_rate: false
+  open_interest: false
+  liquidations: false
+  order_book: false
+
