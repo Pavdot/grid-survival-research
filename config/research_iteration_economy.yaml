@@ -1,0 +1,23 @@
+iteration:
+  name: iteration_002_economy_first
+  output_dir: reports/research_iterations/iteration_002_economy_first
+
+search:
+  take_profit_spacing_multipliers: [0.50, 0.75, 1.00, 1.25, 1.50, 2.00, 2.50, 3.00]
+  survival_min_net_profit_pcts: [0.0, 0.00005, 0.00010, 0.00020]
+  search_entry_stride_bars: 12
+  exact_entry_stride_bars: 1
+  min_grid_fraction_baseline: 0.05
+  min_grid_absolute_cap: 500
+
+selection:
+  primary_metric: expectancy
+  tie_breakers: [profit_factor, max_drawdown, number_of_forced_exits]
+
+cost_sensitivity:
+  fee_multipliers: [0.5, 1.0, 1.5]
+  slippage_bps: [1, 2, 4]
+
+diagnostics:
+  pnl_quantiles: [0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99]
+

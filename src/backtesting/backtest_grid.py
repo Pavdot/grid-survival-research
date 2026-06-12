@@ -34,6 +34,8 @@ def run_grid_backtest(
     add_level_min_score: float | None = None,
     kill_switch_threshold: float | None = None,
     constant_size: bool = False,
+    take_profit_spacing_multiplier: float = 0.5,
+    survival_min_realized_pnl: float | None = None,
 ) -> BacktestResult:
     if allow_open is None:
         allow_open = pd.Series(True, index=market.index)
@@ -66,6 +68,8 @@ def run_grid_backtest(
             score_series=score_positions,
             kill_switch_threshold=kill_switch_threshold,
             add_level_min_score=add_level_min_score,
+            take_profit_spacing_multiplier=take_profit_spacing_multiplier,
+            survival_min_realized_pnl=survival_min_realized_pnl,
         )
         rows.append(result.to_dict())
         i = market.index.get_loc(result.exit_timestamp) + 1
@@ -75,4 +79,3 @@ def run_grid_backtest(
         trades = pd.DataFrame(columns=list(GridSimulationResult.__dataclass_fields__.keys()))
     equity = _make_equity_curve(market.index, trades)
     return BacktestResult(trades=trades, equity_curve=equity)
-

@@ -25,6 +25,23 @@ python -m src.reporting.generate_report
 For a faster smoke run, pass `--limit 3000` to the feature, label, model, and
 backtest commands.
 
+## Research Iterations
+
+ML-first threshold research:
+
+```powershell
+python -m src.research.ml_threshold_research
+```
+
+Economy-first grid calibration:
+
+```powershell
+python -m src.research.economy_first_research
+```
+
+Both write local research outputs under `reports/research_iterations/`, which
+is ignored by Git except for the directory placeholder.
+
 ## Outputs
 
 - `data/processed/btcusdt_5m.parquet`
@@ -59,4 +76,3 @@ If `pytest` is installed, the same tests can also be run with:
 ```powershell
 pytest
 ```
-

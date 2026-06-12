@@ -65,9 +65,13 @@ def simulate_grid_from_index(
     score_series: pd.Series | None = None,
     kill_switch_threshold: float | None = None,
     add_level_min_score: float | None = None,
+    take_profit_spacing_multiplier: float = 0.5,
+    survival_min_realized_pnl: float | None = None,
 ) -> GridSimulationResult:
     if start_pos < 0 or start_pos >= len(market) - 1:
         raise IndexError("start_pos must leave at least one future candle")
+    if take_profit_spacing_multiplier <= 0:
+        raise ValueError("take_profit_spacing_multiplier must be positive")
 
     sizes = default_level_sizes(risk, constant=constant_size)
     start_row = market.iloc[start_pos]
@@ -151,7 +155,7 @@ def simulate_grid_from_index(
             break
 
         avg_entry = sum(fill_price * qty for fill_price, qty in fills) / sum(qty for _, qty in fills)
-        take_profit = avg_entry + spacing * 0.5
+        take_profit = avg_entry + spacing * take_profit_spacing_multiplier
         if high >= take_profit:
             exit_reason = "take_profit"
             exit_price = take_profit * (1 - risk.slippage_pct)
@@ -187,7 +191,8 @@ def simulate_grid_from_index(
 
     realized_pnl, fees_paid = _realize(fills, exit_price, risk.taker_fee, entry_fees)
     if exit_reason == "take_profit":
-        survived = int(realized_pnl >= -risk.max_grid_loss_pct)
+        min_success_pnl = -risk.max_grid_loss_pct if survival_min_realized_pnl is None else survival_min_realized_pnl
+        survived = int(realized_pnl >= min_success_pnl)
     else:
         survived = 0
 
