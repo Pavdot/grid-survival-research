@@ -283,15 +283,25 @@ def run_signal_grid_backtest(
     side_signal: pd.Series,
     candidate: MonthlyMartingaleCandidate,
     blackout_series: pd.Series | None = None,
+    entry_blackout_series: pd.Series | None = None,
+    exit_blackout_series: pd.Series | None = None,
 ) -> SignalGridBacktestResult:
     side_signal = side_signal.reindex(market.index)
     if blackout_series is not None:
         blackout_series = blackout_series.reindex(market.index).fillna(False).astype(bool)
+        if entry_blackout_series is None:
+            entry_blackout_series = blackout_series
+        if exit_blackout_series is None:
+            exit_blackout_series = blackout_series
+    if entry_blackout_series is not None:
+        entry_blackout_series = entry_blackout_series.reindex(market.index).fillna(False).astype(bool)
+    if exit_blackout_series is not None:
+        exit_blackout_series = exit_blackout_series.reindex(market.index).fillna(False).astype(bool)
     rows: list[dict[str, object]] = []
     i = 0
     horizon_bars = max(1, int(risk.max_holding_hours * 60 / 5))
     while i < len(market) - horizon_bars:
-        if blackout_series is not None and bool(blackout_series.iloc[i]):
+        if entry_blackout_series is not None and bool(entry_blackout_series.iloc[i]):
             i += 1
             continue
         side = side_signal.iloc[i]
@@ -305,7 +315,7 @@ def run_signal_grid_backtest(
             take_profit_spacing_multiplier=candidate.take_profit_spacing_multiplier,
             survival_min_realized_pnl=0.0,
             side=str(side),
-            blackout_series=blackout_series,
+            blackout_series=exit_blackout_series,
         )
         row = result.to_dict()
         row.update(asdict(candidate))
@@ -345,6 +355,7 @@ def sample_positions(
     stride_bars: int,
     max_positions: int,
     blackout_series: pd.Series | None = None,
+    entry_blackout_series: pd.Series | None = None,
 ) -> list[int]:
     if stride_bars <= 0:
         raise ValueError("search_entry_stride_bars must be positive")
@@ -357,6 +368,10 @@ def sample_positions(
     cooldown_until = market.index[split_start]
     if blackout_series is not None:
         blackout_series = blackout_series.reindex(market.index).fillna(False).astype(bool)
+        if entry_blackout_series is None:
+            entry_blackout_series = blackout_series
+    if entry_blackout_series is not None:
+        entry_blackout_series = entry_blackout_series.reindex(market.index).fillna(False).astype(bool)
     eligible_signal = side_signal.iloc[split_start : max(split_start, split_end - max_bars + 1)]
     eligible_positions = np.flatnonzero(eligible_signal.isin(["long", "short"]).to_numpy()) + split_start
     last_position = split_start - stride_bars
@@ -365,7 +380,7 @@ def sample_positions(
             continue
         if market.index[pos] < cooldown_until:
             continue
-        if blackout_series is not None and bool(blackout_series.iloc[pos]):
+        if entry_blackout_series is not None and bool(entry_blackout_series.iloc[pos]):
             continue
         if side_signal.iloc[pos] in {"long", "short"} and np.isfinite(float(market.iloc[pos].get("atr_5m", np.nan))):
             positions.append(pos)
@@ -384,9 +399,14 @@ def simulate_candidate_sample(
     candidate: MonthlyMartingaleCandidate,
     split: str,
     blackout_series: pd.Series | None = None,
+    exit_blackout_series: pd.Series | None = None,
 ) -> pd.DataFrame:
     if blackout_series is not None:
         blackout_series = blackout_series.reindex(market.index).fillna(False).astype(bool)
+        if exit_blackout_series is None:
+            exit_blackout_series = blackout_series
+    if exit_blackout_series is not None:
+        exit_blackout_series = exit_blackout_series.reindex(market.index).fillna(False).astype(bool)
     rows: list[dict[str, object]] = []
     for pos in positions:
         side = str(side_signal.iloc[pos])
@@ -397,7 +417,7 @@ def simulate_candidate_sample(
             take_profit_spacing_multiplier=candidate.take_profit_spacing_multiplier,
             survival_min_realized_pnl=0.0,
             side=side,
-            blackout_series=blackout_series,
+            blackout_series=exit_blackout_series,
         )
         row = result.to_dict()
         row.update({**asdict(candidate), "split": split})
@@ -436,6 +456,8 @@ def search_validation_sample(
     candidates: list[MonthlyMartingaleCandidate],
     config: dict[str, Any],
     blackout_series: pd.Series | None = None,
+    entry_blackout_series: pd.Series | None = None,
+    exit_blackout_series: pd.Series | None = None,
 ) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     stride = int(config["search"]["search_entry_stride_bars"])
@@ -456,6 +478,7 @@ def search_validation_sample(
             stride,
             max_positions,
             blackout_series=blackout_series,
+            entry_blackout_series=entry_blackout_series,
         )
         if not positions:
             continue
@@ -467,6 +490,7 @@ def search_validation_sample(
             candidate,
             SEARCH_SPLIT,
             blackout_series=blackout_series,
+            exit_blackout_series=exit_blackout_series,
         )
         summary = summarize_simulations(sample, baseline_grids=len(positions))
         rows.append(
@@ -542,6 +566,8 @@ def evaluate_exact_candidates(
     candidate_rows: list[dict[str, Any]],
     split_name: str,
     blackout_series: pd.Series | None = None,
+    entry_blackout_series: pd.Series | None = None,
+    exit_blackout_series: pd.Series | None = None,
 ) -> tuple[pd.DataFrame, dict[str, SignalGridBacktestResult]]:
     rows: list[dict[str, Any]] = []
     results: dict[str, SignalGridBacktestResult] = {}
@@ -549,6 +575,16 @@ def evaluate_exact_candidates(
     split_blackout = None
     if blackout_series is not None:
         split_blackout = blackout_series.reindex(split_frame.index).fillna(False).astype(bool)
+        if entry_blackout_series is None:
+            entry_blackout_series = blackout_series
+        if exit_blackout_series is None:
+            exit_blackout_series = blackout_series
+    split_entry_blackout = None
+    split_exit_blackout = None
+    if entry_blackout_series is not None:
+        split_entry_blackout = entry_blackout_series.reindex(split_frame.index).fillna(False).astype(bool)
+    if exit_blackout_series is not None:
+        split_exit_blackout = exit_blackout_series.reindex(split_frame.index).fillna(False).astype(bool)
     signal_cache: dict[tuple[object, ...], pd.Series] = {}
     for row in candidate_rows:
         candidate = candidate_from_row(row)
@@ -557,7 +593,15 @@ def evaluate_exact_candidates(
         if key not in signal_cache:
             signal_cache[key] = build_side_signal(market, signal_frame, candidate)
         side_signal = signal_cache[key]
-        result = run_signal_grid_backtest(split_frame, risk, side_signal, candidate, blackout_series=split_blackout)
+        result = run_signal_grid_backtest(
+            split_frame,
+            risk,
+            side_signal,
+            candidate,
+            blackout_series=split_blackout,
+            entry_blackout_series=split_entry_blackout,
+            exit_blackout_series=split_exit_blackout,
+        )
         rows.append(summarize_exact(result.equity_curve, result.trades, candidate, split_name))
         results[candidate.name] = result
     if not rows:
