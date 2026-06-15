@@ -81,6 +81,7 @@ def simulate_grid_from_index(
     take_profit_spacing_multiplier: float = 0.5,
     survival_min_realized_pnl: float | None = None,
     side: str = "long",
+    blackout_series: pd.Series | None = None,
 ) -> GridSimulationResult:
     if start_pos < 0 or start_pos >= len(market) - 1:
         raise IndexError("start_pos must leave at least one future candle")
@@ -88,6 +89,8 @@ def simulate_grid_from_index(
         raise ValueError("take_profit_spacing_multiplier must be positive")
     if side not in {"long", "short"}:
         raise ValueError("side must be either 'long' or 'short'")
+    if blackout_series is not None and len(blackout_series) != len(market):
+        raise ValueError("blackout_series must be aligned to market length")
 
     sizes = default_level_sizes(risk, constant=constant_size)
     start_row = market.iloc[start_pos]
@@ -134,6 +137,12 @@ def simulate_grid_from_index(
         high = float(row["high"])
         close = float(row["close"])
         exit_pos = pos
+        mark_price = close * (1 - risk.slippage_pct) if side == "long" else close * (1 + risk.slippage_pct)
+
+        if blackout_series is not None and bool(blackout_series.iloc[pos]):
+            exit_reason = "fundamental_blackout"
+            exit_price = mark_price
+            break
 
         while next_level < risk.max_levels:
             level_price = entry_reference - spacing * next_level if side == "long" else entry_reference + spacing * next_level
@@ -160,7 +169,6 @@ def simulate_grid_from_index(
         if stopped_by_exposure:
             break
 
-        mark_price = close * (1 - risk.slippage_pct) if side == "long" else close * (1 + risk.slippage_pct)
         unrealized = _unrealized_pnl_pct(fills, mark_price, risk.taker_fee, side=side) - entry_fees
         max_adverse = max(max_adverse, max(0.0, -unrealized))
         max_favorable = max(max_favorable, max(0.0, unrealized))

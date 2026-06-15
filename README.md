@@ -63,6 +63,13 @@ Walk-forward martingale research:
 python -m src.research.walk_forward_martingale_research
 ```
 
+Fundamental-blackout walk-forward martingale research:
+
+```powershell
+python -m src.research.fundamental_blackout_martingale_research
+python -m src.research.fundamental_blackout_martingale_research --max-folds 2 --max-candidates 10 --exact-top-n 3
+```
+
 All research iterations write local outputs under `reports/research_iterations/`, which
 is ignored by Git except for the directory placeholder.
 
