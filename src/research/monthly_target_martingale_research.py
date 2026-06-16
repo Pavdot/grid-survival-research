@@ -65,6 +65,33 @@ class SignalGridBacktestResult:
     equity_curve: pd.Series
 
 
+MaskLike = pd.Series | dict[str, pd.Series] | None
+
+
+def _align_mask_like(mask: MaskLike, index: pd.Index) -> MaskLike:
+    if mask is None:
+        return None
+    if isinstance(mask, dict):
+        return {side: series.reindex(index).fillna(False).astype(bool) for side, series in mask.items()}
+    return mask.reindex(index).fillna(False).astype(bool)
+
+
+def _mask_for_side(mask: MaskLike, side: str) -> pd.Series | None:
+    if mask is None:
+        return None
+    if isinstance(mask, dict):
+        series = mask.get(side)
+        if series is None:
+            return None
+        return series
+    return mask
+
+
+def _mask_value(mask: MaskLike, side: str, pos: int) -> bool:
+    series = _mask_for_side(mask, side)
+    return False if series is None else bool(series.iloc[pos])
+
+
 def monthly_return_from_equity(equity: pd.Series) -> float:
     equity = equity.dropna()
     if len(equity) < 2 or float(equity.iloc[0]) <= 0:
@@ -282,31 +309,34 @@ def run_signal_grid_backtest(
     risk: GridRiskConfig,
     side_signal: pd.Series,
     candidate: MonthlyMartingaleCandidate,
-    blackout_series: pd.Series | None = None,
-    entry_blackout_series: pd.Series | None = None,
-    exit_blackout_series: pd.Series | None = None,
+    blackout_series: MaskLike = None,
+    entry_blackout_series: MaskLike = None,
+    exit_blackout_series: MaskLike = None,
     exit_blackout_reason: str = "fundamental_blackout",
+    add_block_series: MaskLike = None,
+    emergency_exit_series: MaskLike = None,
+    emergency_exit_reason: str = "range_break_emergency",
 ) -> SignalGridBacktestResult:
     side_signal = side_signal.reindex(market.index)
     if blackout_series is not None:
-        blackout_series = blackout_series.reindex(market.index).fillna(False).astype(bool)
+        blackout_series = _align_mask_like(blackout_series, market.index)
         if entry_blackout_series is None:
             entry_blackout_series = blackout_series
         if exit_blackout_series is None:
             exit_blackout_series = blackout_series
-    if entry_blackout_series is not None:
-        entry_blackout_series = entry_blackout_series.reindex(market.index).fillna(False).astype(bool)
-    if exit_blackout_series is not None:
-        exit_blackout_series = exit_blackout_series.reindex(market.index).fillna(False).astype(bool)
+    entry_blackout_series = _align_mask_like(entry_blackout_series, market.index)
+    exit_blackout_series = _align_mask_like(exit_blackout_series, market.index)
+    add_block_series = _align_mask_like(add_block_series, market.index)
+    emergency_exit_series = _align_mask_like(emergency_exit_series, market.index)
     rows: list[dict[str, object]] = []
     i = 0
     horizon_bars = max(1, int(risk.max_holding_hours * 60 / 5))
     while i < len(market) - horizon_bars:
-        if entry_blackout_series is not None and bool(entry_blackout_series.iloc[i]):
-            i += 1
-            continue
         side = side_signal.iloc[i]
         if side not in {"long", "short"}:
+            i += 1
+            continue
+        if _mask_value(entry_blackout_series, str(side), i):
             i += 1
             continue
         result: GridSimulationResult = simulate_grid_from_index(
@@ -316,8 +346,11 @@ def run_signal_grid_backtest(
             take_profit_spacing_multiplier=candidate.take_profit_spacing_multiplier,
             survival_min_realized_pnl=0.0,
             side=str(side),
-            blackout_series=exit_blackout_series,
+            blackout_series=_mask_for_side(exit_blackout_series, str(side)),
             blackout_exit_reason=exit_blackout_reason,
+            add_block_series=_mask_for_side(add_block_series, str(side)),
+            emergency_exit_series=_mask_for_side(emergency_exit_series, str(side)),
+            emergency_exit_reason=emergency_exit_reason,
         )
         row = result.to_dict()
         row.update(asdict(candidate))
@@ -356,8 +389,8 @@ def sample_positions(
     cooldown_hours: float,
     stride_bars: int,
     max_positions: int,
-    blackout_series: pd.Series | None = None,
-    entry_blackout_series: pd.Series | None = None,
+    blackout_series: MaskLike = None,
+    entry_blackout_series: MaskLike = None,
 ) -> list[int]:
     if stride_bars <= 0:
         raise ValueError("search_entry_stride_bars must be positive")
@@ -369,11 +402,10 @@ def sample_positions(
     positions: list[int] = []
     cooldown_until = market.index[split_start]
     if blackout_series is not None:
-        blackout_series = blackout_series.reindex(market.index).fillna(False).astype(bool)
+        blackout_series = _align_mask_like(blackout_series, market.index)
         if entry_blackout_series is None:
             entry_blackout_series = blackout_series
-    if entry_blackout_series is not None:
-        entry_blackout_series = entry_blackout_series.reindex(market.index).fillna(False).astype(bool)
+    entry_blackout_series = _align_mask_like(entry_blackout_series, market.index)
     eligible_signal = side_signal.iloc[split_start : max(split_start, split_end - max_bars + 1)]
     eligible_positions = np.flatnonzero(eligible_signal.isin(["long", "short"]).to_numpy()) + split_start
     last_position = split_start - stride_bars
@@ -382,9 +414,10 @@ def sample_positions(
             continue
         if market.index[pos] < cooldown_until:
             continue
-        if entry_blackout_series is not None and bool(entry_blackout_series.iloc[pos]):
+        side = side_signal.iloc[pos]
+        if _mask_value(entry_blackout_series, str(side), pos):
             continue
-        if side_signal.iloc[pos] in {"long", "short"} and np.isfinite(float(market.iloc[pos].get("atr_5m", np.nan))):
+        if side in {"long", "short"} and np.isfinite(float(market.iloc[pos].get("atr_5m", np.nan))):
             positions.append(pos)
             last_position = pos
             cooldown_until = market.index[pos] + pd.Timedelta(hours=max(risk.max_holding_hours, cooldown_hours))

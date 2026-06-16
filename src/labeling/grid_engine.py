@@ -110,6 +110,9 @@ def simulate_grid_from_index(
     side: str = "long",
     blackout_series: pd.Series | None = None,
     blackout_exit_reason: str = "fundamental_blackout",
+    add_block_series: pd.Series | None = None,
+    emergency_exit_series: pd.Series | None = None,
+    emergency_exit_reason: str = "range_break_emergency",
 ) -> GridSimulationResult:
     if start_pos < 0 or start_pos >= len(market) - 1:
         raise IndexError("start_pos must leave at least one future candle")
@@ -119,6 +122,10 @@ def simulate_grid_from_index(
         raise ValueError("side must be either 'long' or 'short'")
     if blackout_series is not None and len(blackout_series) != len(market):
         raise ValueError("blackout_series must be aligned to market length")
+    if add_block_series is not None and len(add_block_series) != len(market):
+        raise ValueError("add_block_series must be aligned to market length")
+    if emergency_exit_series is not None and len(emergency_exit_series) != len(market):
+        raise ValueError("emergency_exit_series must be aligned to market length")
 
     sizes = default_level_sizes(risk, constant=constant_size)
     start_row = market.iloc[start_pos]
@@ -172,10 +179,18 @@ def simulate_grid_from_index(
             exit_price = mark_price
             break
 
+        if emergency_exit_series is not None and bool(emergency_exit_series.iloc[pos]):
+            stopped_by_kill = 1
+            exit_reason = str(emergency_exit_reason)
+            exit_price = mark_price
+            break
+
         while next_level < risk.max_levels:
             level_price = entry_reference - spacing * next_level if side == "long" else entry_reference + spacing * next_level
             level_reached = low <= level_price if side == "long" else high >= level_price
             if not level_reached:
+                break
+            if add_block_series is not None and bool(add_block_series.iloc[pos]):
                 break
             if (
                 score_series is not None
