@@ -34,8 +34,37 @@ def _parse_utc(value: object, column: str) -> pd.Timestamp:
     return timestamp.tz_convert("UTC")
 
 
-def default_fundamental_events() -> pd.DataFrame:
-    """Curated MVP seed: major scheduled macro events plus crypto surprise proxies."""
+def _xau_ppi_events() -> pd.DataFrame:
+    rows = [
+        ("2024-07-12T12:30:00Z", "2024-07-12T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2024-08-13T12:30:00Z", "2024-08-13T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2024-09-12T12:30:00Z", "2024-09-12T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2024-10-11T12:30:00Z", "2024-10-11T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2024-11-14T13:30:00Z", "2024-11-14T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2024-12-12T13:30:00Z", "2024-12-12T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-01-14T13:30:00Z", "2025-01-14T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-02-13T13:30:00Z", "2025-02-13T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-03-13T12:30:00Z", "2025-03-13T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-04-11T12:30:00Z", "2025-04-11T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-05-15T12:30:00Z", "2025-05-15T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-06-12T12:30:00Z", "2025-06-12T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-07-16T12:30:00Z", "2025-07-16T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-08-14T12:30:00Z", "2025-08-14T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-09-10T12:30:00Z", "2025-09-10T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2025-11-25T13:30:00Z", "2025-11-25T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2026-01-14T13:30:00Z", "2026-01-14T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2026-01-30T13:30:00Z", "2026-01-30T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2026-02-27T13:30:00Z", "2026-02-27T13:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2026-03-18T12:30:00Z", "2026-03-18T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2026-04-14T12:30:00Z", "2026-04-14T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2026-05-13T12:30:00Z", "2026-05-13T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+        ("2026-06-11T12:30:00Z", "2026-06-11T12:30:00Z", "macro_ppi", 4, "seed", "US PPI release", True, False),
+    ]
+    return pd.DataFrame(rows, columns=EVENT_COLUMNS)
+
+
+def default_fundamental_events(profile: str = "btc_macro_crypto") -> pd.DataFrame:
+    """Curated MVP seeds for scheduled macro events and asset-specific surprise proxies."""
     rows = [
         ("2024-04-20T00:09:00Z", "2024-04-20T00:09:00Z", "halving", 4, "seed", "Bitcoin halving execution window", True, False),
         ("2024-06-07T12:30:00Z", "2024-06-07T12:30:00Z", "macro_jobs", 4, "seed", "US employment situation release", True, False),
@@ -106,7 +135,17 @@ def default_fundamental_events() -> pd.DataFrame:
         ("2026-06-05T12:30:00Z", "2026-06-05T12:30:00Z", "macro_jobs", 4, "seed", "US employment situation release", True, False),
         ("2026-06-10T12:30:00Z", "2026-06-10T12:30:00Z", "macro_cpi", 5, "seed", "US CPI release", True, False),
     ]
-    return normalize_fundamental_events(pd.DataFrame(rows, columns=EVENT_COLUMNS))
+    events = pd.DataFrame(rows, columns=EVENT_COLUMNS)
+    if profile == "btc_macro_crypto":
+        return normalize_fundamental_events(events)
+    if profile == "xau_macro":
+        macro_categories = {"macro_fomc", "macro_cpi", "macro_jobs"}
+        macro_events = events[events["category"].isin(macro_categories)]
+        return normalize_fundamental_events(pd.concat([macro_events, _xau_ppi_events()], ignore_index=True))
+    if profile == "macro_only":
+        macro_events = events[events["category"].astype(str).str.startswith("macro_")]
+        return normalize_fundamental_events(macro_events)
+    raise ValueError(f"Unsupported default fundamental event profile: {profile}")
 
 
 def normalize_fundamental_events(events: pd.DataFrame) -> pd.DataFrame:
@@ -133,7 +172,7 @@ def load_fundamental_events(config: dict[str, Any]) -> pd.DataFrame:
     events_path = blackout_config.get("events_path")
     events: list[pd.DataFrame] = []
     if bool(blackout_config.get("use_default_seed", True)):
-        events.append(default_fundamental_events())
+        events.append(default_fundamental_events(str(blackout_config.get("default_seed_profile", "btc_macro_crypto"))))
     if events_path:
         path = Path(events_path)
         if not path.is_absolute():

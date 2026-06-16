@@ -15,6 +15,7 @@ from src.backtesting.walk_forward import temporal_train_validation_test_split
 from src.data.validate_data import load_processed
 from src.labeling.grid_engine import GridSimulationResult, simulate_grid_from_index
 from src.labeling.grid_risk import GridRiskConfig, validate_strategy_config
+from src.utils.asset_paths import feature_path, processed_ohlcv_path
 from src.utils.config_loader import load_settings, load_strategy_config, load_yaml, project_path
 from src.utils.logging import get_logger
 
@@ -55,11 +56,11 @@ def make_economy_candidates(config: dict[str, Any]) -> list[EconomyCandidate]:
     return candidates
 
 
-def prepare_market() -> pd.DataFrame:
-    market = load_processed(project_path("data/processed/btcusdt_5m.parquet"))
-    features_path = project_path("data/features/grid_features.parquet")
-    if features_path.exists():
-        features = pd.read_parquet(features_path)
+def prepare_market(asset: str = "btcusdt") -> pd.DataFrame:
+    market = load_processed(processed_ohlcv_path(asset, "5m"))
+    path = feature_path(asset)
+    if path.exists():
+        features = pd.read_parquet(path)
         cols = [
             "atr_5m",
             "breakout_risk",
@@ -436,4 +437,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

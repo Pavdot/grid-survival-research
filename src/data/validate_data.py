@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.utils.config_loader import configured_path
+from src.utils.asset_paths import processed_ohlcv_path
 from src.utils.logging import get_logger
 from src.utils.time_utils import ensure_utc_index, timeframe_to_minutes
 
@@ -39,10 +39,11 @@ def load_processed(path: Path) -> pd.DataFrame:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate processed OHLCV data.")
+    parser.add_argument("--asset", default="btcusdt")
     parser.add_argument("--timeframe", default="5m")
     parser.add_argument("--path", default=None)
     args = parser.parse_args()
-    path = Path(args.path) if args.path else configured_path("processed_dir", f"btcusdt_{args.timeframe}.parquet")
+    path = Path(args.path) if args.path else processed_ohlcv_path(args.asset, args.timeframe)
     df = load_processed(path)
     validate_ohlcv(df, timeframe=args.timeframe)
     LOGGER.info("Validated %s rows in %s", len(df), path)
@@ -50,4 +51,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -5,7 +5,8 @@ import argparse
 import pandas as pd
 
 from src.data.validate_data import load_processed, validate_ohlcv
-from src.utils.config_loader import configured_path, load_settings
+from src.utils.asset_paths import processed_ohlcv_path
+from src.utils.config_loader import load_settings
 from src.utils.logging import get_logger
 from src.utils.time_utils import timeframe_to_pandas_freq
 
@@ -29,6 +30,23 @@ def resample_closed_ohlcv(df_5m: pd.DataFrame, timeframe: str) -> pd.DataFrame:
         "close_datetime": "last",
         "open_time": "first",
         "close_time": "last",
+        "bid_open": "first",
+        "bid_high": "max",
+        "bid_low": "min",
+        "bid_close": "last",
+        "bid_volume": "sum",
+        "ask_open": "first",
+        "ask_high": "max",
+        "ask_low": "min",
+        "ask_close": "last",
+        "ask_volume": "sum",
+        "spread_open": "first",
+        "spread_high": "max",
+        "spread_low": "min",
+        "spread_close": "last",
+        "spread_avg": "mean",
+        "spread_bps_close": "last",
+        "tick_count": "sum",
     }
     available_agg = {key: value for key, value in agg.items() if key in df_5m.columns}
     resampled = (
@@ -41,9 +59,9 @@ def resample_closed_ohlcv(df_5m: pd.DataFrame, timeframe: str) -> pd.DataFrame:
     return resampled
 
 
-def rebuild_timeframes(limit: int | None = None) -> dict[str, pd.DataFrame]:
+def rebuild_timeframes(asset: str = "btcusdt", limit: int | None = None) -> dict[str, pd.DataFrame]:
     settings = load_settings()
-    source = configured_path("processed_dir", "btcusdt_5m.parquet")
+    source = processed_ohlcv_path(asset, "5m")
     df_5m = load_processed(source)
     if limit is not None:
         df_5m = df_5m.iloc[:limit]
@@ -53,7 +71,7 @@ def rebuild_timeframes(limit: int | None = None) -> dict[str, pd.DataFrame]:
     for timeframe in settings["data"]["higher_timeframes"]:
         frame = resample_closed_ohlcv(df_5m, timeframe)
         validate_ohlcv(frame, timeframe)
-        output = configured_path("processed_dir", f"btcusdt_{timeframe}.parquet")
+        output = processed_ohlcv_path(asset, timeframe)
         frame.to_parquet(output)
         LOGGER.info("Wrote %s rows to %s", len(frame), output)
         outputs[timeframe] = frame
@@ -62,11 +80,11 @@ def rebuild_timeframes(limit: int | None = None) -> dict[str, pd.DataFrame]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Rebuild higher timeframes from closed 5m candles.")
+    parser.add_argument("--asset", default="btcusdt")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
-    rebuild_timeframes(limit=args.limit)
+    rebuild_timeframes(asset=args.asset, limit=args.limit)
 
 
 if __name__ == "__main__":
     main()
-

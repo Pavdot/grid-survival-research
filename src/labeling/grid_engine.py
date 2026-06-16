@@ -41,6 +41,33 @@ def _safe_spacing(entry_price: float, atr_value: float, risk: GridRiskConfig) ->
     return entry_price * 0.001
 
 
+def _spread_from_row(row: pd.Series, risk: GridRiskConfig) -> float:
+    if risk.cost_model != "bid_ask_spread":
+        return 0.0
+    candidates = [
+        row.get("spread_close", np.nan),
+        row.get("spread_avg", np.nan),
+    ]
+    if pd.notna(row.get("ask_close", np.nan)) and pd.notna(row.get("bid_close", np.nan)):
+        candidates.append(float(row["ask_close"]) - float(row["bid_close"]))
+    for value in candidates:
+        spread = float(value)
+        if np.isfinite(spread) and spread > 0:
+            return spread
+    raise ValueError("bid_ask_spread cost_model requires positive spread columns")
+
+
+def _execution_price(mid_price: float, row: pd.Series, risk: GridRiskConfig, side: str, action: str) -> float:
+    if action not in {"entry", "exit"}:
+        raise ValueError("action must be entry or exit")
+    spread = _spread_from_row(row, risk)
+    is_buy = (side == "long" and action == "entry") or (side == "short" and action == "exit")
+    price = mid_price + spread / 2 if is_buy else mid_price - spread / 2
+    if is_buy:
+        return price * (1 + risk.slippage_pct)
+    return price * (1 - risk.slippage_pct)
+
+
 def _unrealized_pnl_pct(
     fills: list[tuple[float, float]],
     mark_price: float,
@@ -115,20 +142,20 @@ def simulate_grid_from_index(
     stopped_by_exposure = 0
     stopped_by_kill = 0
 
-    def add_fill(level_price: float, size_pct: float) -> None:
+    def add_fill(level_price: float, fill_row: pd.Series, size_pct: float) -> None:
         nonlocal exposure_pct, entry_fees, slippage_paid
-        fill_price = level_price * (1 + risk.slippage_pct) if side == "long" else level_price * (1 - risk.slippage_pct)
+        fill_price = _execution_price(level_price, fill_row, risk, side, "entry")
         qty = size_pct / fill_price
         fills.append((fill_price, qty))
         exposure_pct += size_pct
         entry_fees += size_pct * risk.taker_fee
         slippage_paid += abs(fill_price - level_price) * qty
 
-    add_fill(entry_reference, sizes[0])
+    add_fill(entry_reference, start_row, sizes[0])
     next_level = 1
     max_exposure = exposure_pct
 
-    exit_price = entry_reference * (1 - risk.slippage_pct) if side == "long" else entry_reference * (1 + risk.slippage_pct)
+    exit_price = _execution_price(entry_reference, start_row, risk, side, "exit")
     exit_pos = start_pos
 
     for pos in range(start_pos + 1, min(len(market), start_pos + max_bars + 1)):
@@ -137,7 +164,7 @@ def simulate_grid_from_index(
         high = float(row["high"])
         close = float(row["close"])
         exit_pos = pos
-        mark_price = close * (1 - risk.slippage_pct) if side == "long" else close * (1 + risk.slippage_pct)
+        mark_price = _execution_price(close, row, risk, side, "exit")
 
         if blackout_series is not None and bool(blackout_series.iloc[pos]):
             exit_reason = "fundamental_blackout"
@@ -161,9 +188,9 @@ def simulate_grid_from_index(
             if proposed_exposure > risk.max_total_exposure_pct + 1e-12:
                 stopped_by_exposure = 1
                 exit_reason = "max_exposure"
-                exit_price = close * (1 - risk.slippage_pct) if side == "long" else close * (1 + risk.slippage_pct)
+                exit_price = mark_price
                 break
-            add_fill(level_price, sizes[next_level])
+            add_fill(level_price, row, sizes[next_level])
             next_level += 1
             max_exposure = max(max_exposure, exposure_pct)
         if stopped_by_exposure:
@@ -188,7 +215,7 @@ def simulate_grid_from_index(
         take_profit_reached = high >= take_profit if side == "long" else low <= take_profit
         if take_profit_reached:
             exit_reason = "take_profit"
-            exit_price = take_profit * (1 - risk.slippage_pct) if side == "long" else take_profit * (1 + risk.slippage_pct)
+            exit_price = _execution_price(take_profit, row, risk, side, "exit")
             break
 
         if risk.stop_on_regime_break and bool(row.get("breakout_risk", 0)):
@@ -217,11 +244,8 @@ def simulate_grid_from_index(
     else:
         stopped_by_holding = 1
         exit_reason = "max_holding"
-        exit_price = (
-            float(market.iloc[exit_pos]["close"]) * (1 - risk.slippage_pct)
-            if side == "long"
-            else float(market.iloc[exit_pos]["close"]) * (1 + risk.slippage_pct)
-        )
+        exit_row = market.iloc[exit_pos]
+        exit_price = _execution_price(float(exit_row["close"]), exit_row, risk, side, "exit")
 
     realized_pnl, fees_paid = _realize(fills, exit_price, risk.taker_fee, entry_fees, side=side)
     if exit_reason == "take_profit":

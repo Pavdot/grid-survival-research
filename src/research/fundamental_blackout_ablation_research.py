@@ -37,6 +37,7 @@ from src.research.walk_forward_martingale_research import (
     stitch_oos_equity,
     summarize_walk_forward,
 )
+from src.utils.asset_paths import normalize_asset_id, processed_ohlcv_path
 from src.utils.config_loader import load_strategy_config, load_yaml, project_path
 from src.utils.logging import get_logger
 
@@ -80,7 +81,7 @@ def build_regime_danger_mask(market: pd.DataFrame, config: dict[str, Any]) -> pd
 def validate_variants(config: dict[str, Any]) -> list[str]:
     variants = list(config.get("ablation", {}).get("variants", VARIANTS))
     if variants != VARIANTS:
-        raise ValueError(f"Iteration 008 must compare variants exactly in this order: {VARIANTS}")
+        raise ValueError(f"Blackout ablation must compare variants exactly in this order: {VARIANTS}")
     return variants
 
 
@@ -307,9 +308,15 @@ def decide_ablation(comparison: pd.DataFrame) -> str:
     regime = comparison[comparison["variant"] == "realistic_regime_entry_only"].iloc[0]
     oracle = comparison[comparison["variant"] == "oracle_entry_only"].iloc[0]
     baseline_monthly = float(baseline["aggregate_monthly_return"])
-    if float(regime["aggregate_monthly_return"]) > baseline_monthly:
+    deltas = {
+        "realistic_entry_only": float(entry["aggregate_monthly_return"]) - baseline_monthly,
+        "realistic_close_on_blackout": float(close["aggregate_monthly_return"]) - baseline_monthly,
+        "realistic_regime_entry_only": float(regime["aggregate_monthly_return"]) - baseline_monthly,
+    }
+    best_realistic = max(deltas, key=deltas.get)
+    if deltas[best_realistic] > 0 and best_realistic == "realistic_regime_entry_only":
         return "regime filter helps"
-    if float(entry["aggregate_monthly_return"]) > baseline_monthly:
+    if deltas[best_realistic] > 0 and best_realistic in {"realistic_entry_only", "realistic_close_on_blackout"}:
         return "entry-only helps"
     if float(oracle["aggregate_monthly_return"]) > baseline_monthly:
         return "oracle-only edge"
@@ -338,8 +345,10 @@ def write_report(output_dir: Path, payload: dict[str, Any]) -> Path:
     report = output_dir / "iteration_report.md"
     comparison = pd.DataFrame(payload["comparison"])
     attribution = pd.DataFrame(payload["trade_attribution"])
+    iteration_name = str(payload.get("iteration_name", "blackout_ablation"))
+    asset_id = str(payload.get("asset_id", "btcusdt")).upper()
     lines = [
-        "# Iteration 008 - Fundamental Blackout Ablation",
+        f"# {iteration_name} - {asset_id} Fundamental Blackout Ablation",
         "",
         "## Decision",
         f"`{payload['decision']}`",
@@ -371,7 +380,7 @@ def write_report(output_dir: Path, payload: dict[str, Any]) -> Path:
         else "No non-baseline attribution rows.",
         "",
         "## Interpretation",
-        "This ablation keeps the same martingale engine, event seed, folds, and capped candidate budget as the Iteration 007 validation run. Drawdown is report-only. Entry-only variants block new grids but do not force-close open grids; close-on-blackout matches the Iteration 007 policy.",
+        "This ablation keeps the same martingale engine family, folds, and capped candidate budget. Drawdown is report-only. Entry-only variants block new grids but do not force-close open grids; close-on-blackout force-closes open grids when the blackout mask turns on.",
     ]
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return report
@@ -387,6 +396,8 @@ def run_iteration(
     if exact_top_n is not None:
         config["search"]["exact_top_n"] = int(exact_top_n)
     variants = validate_variants(config)
+    asset_id = normalize_asset_id(config.get("asset", {}).get("id", "btcusdt"))
+    strategy_config_path = config.get("strategy_config")
 
     output_dir = project_path(config["iteration"]["output_dir"])
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -395,9 +406,10 @@ def run_iteration(
     for old_trade_file in trades_dir.glob("*_fold_*_trades.csv"):
         old_trade_file.unlink()
 
-    base_risk = validate_strategy_config(load_strategy_config())
-    market = prepare_market()
-    signal_frame = load_processed(project_path("data/processed/btcusdt_1h.parquet"))
+    strategy_config = load_yaml(strategy_config_path) if strategy_config_path else load_strategy_config()
+    base_risk = validate_strategy_config(strategy_config)
+    market = prepare_market(asset=asset_id)
+    signal_frame = load_processed(processed_ohlcv_path(asset_id, config.get("asset", {}).get("signal_timeframe", "1h")))
     wf = config["walk_forward"]
     windows = make_walk_forward_windows(
         market.index,
@@ -431,7 +443,7 @@ def run_iteration(
     blackout_time_rows: list[dict[str, Any]] = []
 
     for variant in variants:
-        LOGGER.info("Running iteration 008 variant: %s", variant)
+        LOGGER.info("Running %s variant: %s", config["iteration"]["name"], variant)
         entry_mask, exit_mask = variant_masks(variant, blackout_masks, regime_danger)
         fold_rows: list[dict[str, Any]] = []
         selected_rows: list[dict[str, Any]] = []
@@ -503,6 +515,8 @@ def run_iteration(
     decision = decide_ablation(comparison)
     payload = {
         "decision": decision,
+        "iteration_name": str(config["iteration"]["name"]),
+        "asset_id": asset_id,
         "comparison": comparison.to_dict("records"),
         "trade_attribution": attribution.to_dict("records"),
         "fold_count": len(windows),

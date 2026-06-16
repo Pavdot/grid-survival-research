@@ -19,6 +19,7 @@ class GridRiskConfig:
     max_holding_hours: float
     stop_on_regime_break: bool
     stop_on_volatility_shock: bool
+    cost_model: str = "bps"
 
     @property
     def slippage_pct(self) -> float:
@@ -36,6 +37,9 @@ def validate_strategy_config(config: dict[str, Any]) -> GridRiskConfig:
     grid = config["grid"]
     risk = config["risk"]
     fees = config["fees"]
+    cost_model = str(fees.get("cost_model", "bps"))
+    if cost_model not in {"bps", "bid_ask_spread"}:
+        raise ValueError("fees.cost_model must be either bps or bid_ask_spread")
 
     if grid.get("allow_exponential_martingale", False):
         raise ValueError("Exponential martingale is explicitly forbidden")
@@ -80,6 +84,7 @@ def validate_strategy_config(config: dict[str, Any]) -> GridRiskConfig:
         max_holding_hours=float(risk["max_holding_hours"]),
         stop_on_regime_break=bool(risk["stop_on_regime_break"]),
         stop_on_volatility_shock=bool(risk["stop_on_volatility_shock"]),
+        cost_model=cost_model,
     )
 
 

@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 
 from src.backtesting.metrics import drawdown_series
-from src.backtesting.walk_forward import walk_forward_splits
 from src.data.validate_data import load_processed
 from src.labeling.grid_risk import validate_strategy_config
 from src.research.economy_first_research import prepare_market
@@ -64,15 +63,13 @@ class WalkForwardWindow:
     test: pd.Index
 
 
-def _bars_for_days(index: pd.Index, days: float) -> int:
-    if days <= 0:
-        raise ValueError("walk-forward days must be positive")
+def _median_bar_duration(index: pd.Index) -> pd.Timedelta:
     if len(index) < 2:
         raise ValueError("index must contain at least two timestamps")
     delta = pd.Series(index).diff().dropna().median()
     if pd.isna(delta) or delta <= pd.Timedelta(0):
         raise ValueError("cannot infer bar duration from index")
-    return max(1, int(round(pd.Timedelta(days=days) / delta)))
+    return delta
 
 
 def make_walk_forward_windows(
@@ -87,16 +84,33 @@ def make_walk_forward_windows(
         raise ValueError("embargo_bars must be non-negative")
     if max_folds is not None and max_folds <= 0:
         raise ValueError("max_folds must be positive")
-    folds = walk_forward_splits(
-        index,
-        train_bars=_bars_for_days(index, train_days),
-        test_bars=_bars_for_days(index, test_days),
-        step_bars=_bars_for_days(index, step_days),
-        embargo_bars=embargo_bars,
-    )
-    windows = [WalkForwardWindow(fold_id=i + 1, train=fold.train, test=fold.test) for i, fold in enumerate(folds)]
-    if max_folds is not None:
-        windows = windows[:max_folds]
+    if train_days <= 0 or test_days <= 0 or step_days <= 0:
+        raise ValueError("walk-forward days must be positive")
+    if index.tz is None:
+        raise ValueError("walk-forward index must be timezone-aware")
+    sorted_index = pd.Index(index).sort_values()
+    embargo_delta = _median_bar_duration(sorted_index) * embargo_bars
+    train_delta = pd.Timedelta(days=float(train_days))
+    test_delta = pd.Timedelta(days=float(test_days))
+    step_delta = pd.Timedelta(days=float(step_days))
+    latest = sorted_index.max()
+    start = sorted_index.min()
+    windows: list[WalkForwardWindow] = []
+    while True:
+        train_start = start
+        train_end = train_start + train_delta
+        test_start = train_end + embargo_delta
+        test_end = test_start + test_delta
+        if test_end > latest:
+            break
+        train = sorted_index[(sorted_index >= train_start) & (sorted_index < train_end)]
+        test = sorted_index[(sorted_index >= test_start) & (sorted_index < test_end)]
+        if train.empty or test.empty:
+            break
+        windows.append(WalkForwardWindow(fold_id=len(windows) + 1, train=train, test=test))
+        if max_folds is not None and len(windows) >= max_folds:
+            break
+        start = start + step_delta
     if not windows:
         raise ValueError("walk-forward configuration produced no folds")
     return windows

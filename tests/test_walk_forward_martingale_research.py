@@ -40,6 +40,15 @@ class WalkForwardMartingaleResearchTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             make_walk_forward_windows(index, train_days=10, test_days=10, step_days=5, embargo_bars=0)
 
+    def test_windows_use_calendar_time_across_market_gaps(self) -> None:
+        raw = pd.date_range("2024-01-01", "2024-03-31", freq="h", tz="UTC")
+        index = raw[raw.dayofweek < 5]
+        folds = make_walk_forward_windows(index, train_days=20, test_days=10, step_days=10, embargo_bars=0)
+        self.assertGreaterEqual(len(folds), 6)
+        first = folds[0]
+        self.assertLessEqual(first.train.max(), pd.Timestamp("2024-01-21T00:00:00Z"))
+        self.assertGreaterEqual(first.test.min(), pd.Timestamp("2024-01-21T00:00:00Z"))
+
     def test_same_candidate_requires_test_candidate_to_match_selection(self) -> None:
         selected = {column: column for column in CANDIDATE_COLUMNS}
         tested = selected.copy()

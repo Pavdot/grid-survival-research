@@ -1,0 +1,27 @@
+symbol: XAUUSD
+base_timeframe: 5m
+fees:
+  cost_model: bid_ask_spread
+  taker_fee: 0.0
+  maker_fee: 0.0
+  slippage_bps: 0
+grid:
+  spacing_mode: atr
+  spacing_atr_multiplier: 0.5
+  max_levels: 5
+  base_position_size_pct: 0.10
+  sizing_mode: linear
+  sizing_sequence: [1.0, 1.15, 1.30, 1.45, 1.60]
+  allow_exponential_martingale: false
+risk:
+  max_grid_loss_pct: 0.01
+  max_daily_loss_pct: 0.025
+  max_total_exposure_pct: 0.50
+  max_holding_hours: 12
+  stop_on_regime_break: true
+  stop_on_volatility_shock: true
+model_filter:
+  min_survival_probability_open: 0.70
+  min_survival_probability_add: 0.80
+  block_new_levels_below: 0.60
+  force_exit_below: 0.40

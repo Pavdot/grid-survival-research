@@ -7,6 +7,7 @@ import pandas as pd
 from src.labeling.grid_risk import validate_strategy_config
 from src.research.fundamental_blackout_ablation_research import (
     build_regime_danger_mask,
+    decide_ablation,
     trade_attribution_by_fold,
 )
 from src.research.fundamental_blackout_martingale_research import select_best_exact_no_drawdown
@@ -162,6 +163,18 @@ class FundamentalBlackoutAblationTests(unittest.TestCase):
         self.assertEqual(row["variant_only_pnl"], 4.0)
         self.assertEqual(row["common_pnl_delta"], 1.0)
         self.assertEqual(row["effect_scope"], "policy_only")
+
+    def test_decision_uses_best_realistic_improvement(self) -> None:
+        comparison = pd.DataFrame(
+            [
+                {"variant": "baseline", "aggregate_monthly_return": -0.13},
+                {"variant": "realistic_entry_only", "aggregate_monthly_return": -0.09},
+                {"variant": "realistic_close_on_blackout", "aggregate_monthly_return": -0.10},
+                {"variant": "realistic_regime_entry_only", "aggregate_monthly_return": -0.11},
+                {"variant": "oracle_entry_only", "aggregate_monthly_return": -0.09},
+            ]
+        )
+        self.assertEqual(decide_ablation(comparison), "entry-only helps")
 
 
 if __name__ == "__main__":

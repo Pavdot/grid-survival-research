@@ -12,23 +12,24 @@ from src.features.trend_features import add_trend_alignment, add_trend_features,
 from src.features.volatility_features import add_timeframe_atr, add_volatility_features
 from src.features.volume_features import add_volume_features
 from src.regimes.regime_rules import add_regime_columns
-from src.utils.config_loader import configured_path, load_settings
+from src.utils.asset_paths import feature_path, processed_ohlcv_path
+from src.utils.config_loader import load_settings
 from src.utils.logging import get_logger
 
 
 LOGGER = get_logger(__name__)
 
 
-def load_timeframe(timeframe: str, limit: int | None = None) -> pd.DataFrame:
-    df = load_processed(configured_path("processed_dir", f"btcusdt_{timeframe}.parquet"))
+def load_timeframe(timeframe: str, asset: str = "btcusdt", limit: int | None = None) -> pd.DataFrame:
+    df = load_processed(processed_ohlcv_path(asset, timeframe))
     if limit is not None:
         df = df.iloc[:limit]
     return df
 
 
-def build_feature_frame(limit: int | None = None) -> pd.DataFrame:
+def build_feature_frame(asset: str = "btcusdt", limit: int | None = None) -> pd.DataFrame:
     settings = load_settings()
-    df_5m = load_timeframe("5m", limit=limit)
+    df_5m = load_timeframe("5m", asset=asset, limit=limit)
 
     vol = add_volatility_features(df_5m)
     trend = add_trend_features(df_5m)
@@ -39,7 +40,7 @@ def build_feature_frame(limit: int | None = None) -> pd.DataFrame:
     features = pd.concat([vol, trend, ranges, volume, session], axis=1)
 
     for timeframe in settings["data"]["higher_timeframes"]:
-        tf_df = load_timeframe(timeframe)
+        tf_df = load_timeframe(timeframe, asset=asset)
         if limit is not None:
             tf_df = tf_df.loc[tf_df.index <= df_5m.index[-1]]
         features = add_timeframe_atr(features, tf_df, timeframe, df_5m.index)
@@ -52,8 +53,8 @@ def build_feature_frame(limit: int | None = None) -> pd.DataFrame:
     return features
 
 
-def write_features(features: pd.DataFrame) -> str:
-    output = configured_path("features_dir", "grid_features.parquet")
+def write_features(features: pd.DataFrame, asset: str = "btcusdt") -> str:
+    output = feature_path(asset)
     output.parent.mkdir(parents=True, exist_ok=True)
     features.to_parquet(output)
     LOGGER.info("Wrote %s feature rows and %s columns to %s", len(features), len(features.columns), output)
@@ -62,11 +63,11 @@ def write_features(features: pd.DataFrame) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build leakage-safe grid survival features.")
+    parser.add_argument("--asset", default="btcusdt")
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
-    write_features(build_feature_frame(limit=args.limit))
+    write_features(build_feature_frame(asset=args.asset, limit=args.limit), asset=args.asset)
 
 
 if __name__ == "__main__":
     main()
-

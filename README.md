@@ -1,11 +1,11 @@
 # Grid Survival Research
 
-Research-only pipeline for testing whether a bounded BTCUSDT grid can survive
+Research-only pipeline for testing whether bounded BTCUSDT and XAUUSD grids can survive
 specific market regimes. This project does not trade live, does not use private
 API keys, and does not contain execution code.
 
-The MVP uses OHLCV data only. It normalizes BTCUSDT 5m Binance klines, rebuilds
-15m/30m/1h candles from the 5m source, builds leakage-safe features, simulates
+The MVP uses OHLCV data only. It normalizes BTCUSDT 5m Binance klines or local
+XAUUSD Dukascopy 5m bid/ask data, rebuilds 15m/30m/1h candles from the 5m source, builds leakage-safe features, simulates
 bounded grid outcomes, trains grid-survival classifiers, backtests filtered grid
 variants, and writes a Markdown research report.
 
@@ -77,6 +77,16 @@ python -m src.research.fundamental_blackout_ablation_research --max-candidates 1
 python -m src.research.fundamental_blackout_ablation_research --max-folds 2 --max-candidates 10 --exact-top-n 3
 ```
 
+XAUUSD Dukascopy port and blackout ablation:
+
+```powershell
+python -m src.data.load_dukascopy_ohlcv --asset xauusd --input "C:\Users\Utilisateur\Desktop\xauusd_dukascopy_python_direct\xauusd_dukascopy_python_direct\data" --timeframe 5m
+python -m src.data.resample_timeframes --asset xauusd
+python -m src.features.build_features --asset xauusd
+python -m src.research.xauusd_blackout_ablation_research --max-folds 2 --max-candidates 10 --exact-top-n 3
+python -m src.research.xauusd_blackout_ablation_research --max-candidates 10 --exact-top-n 3
+```
+
 All research iterations write local outputs under `reports/research_iterations/`, which
 is ignored by Git except for the directory placeholder.
 
@@ -87,6 +97,8 @@ is ignored by Git except for the directory placeholder.
 - `data/processed/btcusdt_30m.parquet`
 - `data/processed/btcusdt_1h.parquet`
 - `data/features/grid_features.parquet`
+- `data/processed/xauusd_5m.parquet`, `15m`, `30m`, and `1h`
+- `data/features/xauusd_grid_features.parquet`
 - `data/labels/grid_labels.parquet`
 - `reports/model_reports/*.joblib`, metrics, predictions, and report files
 - `reports/backtests/*.csv`
