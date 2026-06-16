@@ -285,6 +285,7 @@ def run_signal_grid_backtest(
     blackout_series: pd.Series | None = None,
     entry_blackout_series: pd.Series | None = None,
     exit_blackout_series: pd.Series | None = None,
+    exit_blackout_reason: str = "fundamental_blackout",
 ) -> SignalGridBacktestResult:
     side_signal = side_signal.reindex(market.index)
     if blackout_series is not None:
@@ -316,6 +317,7 @@ def run_signal_grid_backtest(
             survival_min_realized_pnl=0.0,
             side=str(side),
             blackout_series=exit_blackout_series,
+            blackout_exit_reason=exit_blackout_reason,
         )
         row = result.to_dict()
         row.update(asdict(candidate))

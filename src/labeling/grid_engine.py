@@ -109,6 +109,7 @@ def simulate_grid_from_index(
     survival_min_realized_pnl: float | None = None,
     side: str = "long",
     blackout_series: pd.Series | None = None,
+    blackout_exit_reason: str = "fundamental_blackout",
 ) -> GridSimulationResult:
     if start_pos < 0 or start_pos >= len(market) - 1:
         raise IndexError("start_pos must leave at least one future candle")
@@ -167,7 +168,7 @@ def simulate_grid_from_index(
         mark_price = _execution_price(close, row, risk, side, "exit")
 
         if blackout_series is not None and bool(blackout_series.iloc[pos]):
-            exit_reason = "fundamental_blackout"
+            exit_reason = str(blackout_exit_reason)
             exit_price = mark_price
             break
 
