@@ -1,0 +1,62 @@
+iteration:
+  name: iteration_011_momentum_walk_forward_stability
+  output_dir: reports/research_iterations/iteration_011_momentum_walk_forward_stability
+
+asset:
+  id: btcusdt
+  symbol: BTCUSDT
+  base_timeframe: 5m
+  signal_timeframe: 1h
+
+target:
+  monthly_return: 0.05
+  stretch_monthly_return: 0.20
+  max_drawdown: -0.15
+  min_positive_fold_rate: 0.60
+  min_target_fold_rate: 0.40
+  min_trades: 8
+
+walk_forward:
+  train_days: 180
+  test_days: 30
+  step_days: 30
+  embargo_bars: 0
+
+execution:
+  base_timeframe: 5m
+  signal_timeframe: 1h
+  max_position_pct: 0.50
+  fee_rate: 0.0004
+  slippage_bps: 2
+  max_total_loss_pct: 0.15
+  max_drawdown_constraint: -0.15
+
+search:
+  rsi_windows: [8, 14, 24, 36, 48, 72]
+  rsi_threshold_pairs:
+    - [25, 75]
+    - [30, 70]
+    - [35, 65]
+    - [40, 60]
+    - [45, 55]
+  ema_fast_windows: [8, 12, 20, 30, 50, 75, 100]
+  ema_slow_windows: [50, 75, 100, 150, 200, 300, 500]
+  donchian_windows: [12, 24, 48, 72, 120, 168]
+  rsi_ema_windows: [14, 24, 48]
+  rsi_ema_threshold_pairs:
+    - [30, 70]
+    - [35, 65]
+    - [40, 60]
+  rsi_ema_fast_windows: [12, 20, 50]
+  rsi_ema_slow_windows: [100, 200, 300]
+  max_position_pcts: [0.25, 0.50]
+  include_long_short: true
+  include_long_only: true
+  candidate_sample_size:
+  candidate_sample_seed: 42
+
+selection:
+  primary_metric: risk_adjusted_monthly
+  drawdown_penalty: 0.75
+  tie_breakers: [monthly_return, max_drawdown, total_return, trades]
+  uses_test: false

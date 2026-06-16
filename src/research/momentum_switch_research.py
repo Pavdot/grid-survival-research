@@ -26,6 +26,17 @@ class MomentumCandidate:
     params: dict[str, Any]
 
 
+def monthly_return_from_equity(equity: pd.Series) -> float:
+    equity = equity.dropna()
+    if len(equity) < 2 or float(equity.iloc[0]) <= 0:
+        return 0.0
+    total_return = float(equity.iloc[-1] / equity.iloc[0] - 1.0)
+    if total_return <= -1:
+        return -1.0
+    days = max((equity.index[-1] - equity.index[0]) / pd.Timedelta(days=1), 1 / 24)
+    return float((1 + total_return) ** (30.4375 / days) - 1)
+
+
 def rsi(series: pd.Series, window: int) -> pd.Series:
     if window <= 1:
         raise ValueError("RSI window must be > 1")
@@ -38,31 +49,51 @@ def rsi(series: pd.Series, window: int) -> pd.Series:
 
 def make_candidates(config: dict[str, Any]) -> list[MomentumCandidate]:
     search = config["search"]
-    candidates: list[MomentumCandidate] = []
+    base_candidates: list[MomentumCandidate] = []
+    include_rsi_momentum = bool(search.get("include_rsi_momentum", True))
+    include_rsi_mean_reversion = bool(search.get("include_rsi_mean_reversion", True))
+    include_rsi_long_flat = bool(search.get("include_rsi_long_flat", False))
     for window in search["rsi_windows"]:
         for low, high in search["rsi_threshold_pairs"]:
             if low >= high:
                 raise ValueError("RSI low threshold must be below high threshold")
-            candidates.append(
-                MomentumCandidate(
-                    name=f"rsi_momentum_{window}_{low}_{high}",
-                    signal_type="rsi_momentum",
-                    params={"window": int(window), "low": float(low), "high": float(high)},
+            if include_rsi_momentum:
+                base_candidates.append(
+                    MomentumCandidate(
+                        name=f"rsi_momentum_{window}_{low}_{high}",
+                        signal_type="rsi_momentum",
+                        params={"window": int(window), "low": float(low), "high": float(high)},
+                    )
                 )
-            )
-            candidates.append(
-                MomentumCandidate(
-                    name=f"rsi_mean_reversion_{window}_{low}_{high}",
-                    signal_type="rsi_mean_reversion",
-                    params={"window": int(window), "low": float(low), "high": float(high)},
+            if include_rsi_mean_reversion:
+                base_candidates.append(
+                    MomentumCandidate(
+                        name=f"rsi_mean_reversion_{window}_{low}_{high}",
+                        signal_type="rsi_mean_reversion",
+                        params={"window": int(window), "low": float(low), "high": float(high)},
+                    )
                 )
-            )
+            if include_rsi_long_flat:
+                base_candidates.append(
+                    MomentumCandidate(
+                        name=f"rsi_long_flat_momentum_{window}_{low}_{high}",
+                        signal_type="rsi_long_flat_momentum",
+                        params={"window": int(window), "low": float(low), "high": float(high)},
+                    )
+                )
+                base_candidates.append(
+                    MomentumCandidate(
+                        name=f"rsi_long_flat_mean_reversion_{window}_{low}_{high}",
+                        signal_type="rsi_long_flat_mean_reversion",
+                        params={"window": int(window), "low": float(low), "high": float(high)},
+                    )
+                )
     for fast in search["ema_fast_windows"]:
         for slow in search["ema_slow_windows"]:
             if int(fast) >= int(slow):
                 continue
             if search["include_long_short"]:
-                candidates.append(
+                base_candidates.append(
                     MomentumCandidate(
                         name=f"ema_long_short_{fast}_{slow}",
                         signal_type="ema_long_short",
@@ -70,13 +101,84 @@ def make_candidates(config: dict[str, Any]) -> list[MomentumCandidate]:
                     )
                 )
             if search["include_long_only"]:
-                candidates.append(
+                base_candidates.append(
                     MomentumCandidate(
                         name=f"ema_long_only_{fast}_{slow}",
                         signal_type="ema_long_only",
                         params={"fast": int(fast), "slow": int(slow)},
                     )
                 )
+    for window in search.get("donchian_windows", []):
+        window = int(window)
+        if window <= 1:
+            raise ValueError("donchian_windows must be > 1")
+        if search.get("include_long_short", True):
+            base_candidates.append(
+                MomentumCandidate(
+                    name=f"donchian_long_short_{window}",
+                    signal_type="donchian_long_short",
+                    params={"window": window},
+                )
+            )
+        if search.get("include_long_only", True):
+            base_candidates.append(
+                MomentumCandidate(
+                    name=f"donchian_long_only_{window}",
+                    signal_type="donchian_long_only",
+                    params={"window": window},
+                )
+            )
+    include_rsi_ema_momentum = bool(search.get("include_rsi_ema_momentum", True))
+    include_rsi_ema_long_only = bool(search.get("include_rsi_ema_long_only", False))
+    for window in search.get("rsi_ema_windows", []):
+        for low, high in search.get("rsi_ema_threshold_pairs", search["rsi_threshold_pairs"]):
+            if low >= high:
+                raise ValueError("RSI EMA low threshold must be below high threshold")
+            for fast in search.get("rsi_ema_fast_windows", []):
+                for slow in search.get("rsi_ema_slow_windows", []):
+                    if int(fast) >= int(slow):
+                        continue
+                    params = {
+                        "window": int(window),
+                        "low": float(low),
+                        "high": float(high),
+                        "fast": int(fast),
+                        "slow": int(slow),
+                    }
+                    if include_rsi_ema_momentum:
+                        base_candidates.append(
+                            MomentumCandidate(
+                                name=f"rsi_ema_momentum_{window}_{low}_{high}_{fast}_{slow}",
+                                signal_type="rsi_ema_momentum",
+                                params=params,
+                            )
+                        )
+                    if include_rsi_ema_long_only:
+                        base_candidates.append(
+                            MomentumCandidate(
+                                name=f"rsi_ema_long_only_{window}_{low}_{high}_{fast}_{slow}",
+                                signal_type="rsi_ema_long_only",
+                                params=params,
+                            )
+                        )
+    candidates: list[MomentumCandidate] = []
+    position_values = search.get("max_position_pcts")
+    if position_values:
+        for candidate in base_candidates:
+            for value in position_values:
+                position = float(value)
+                if position <= 0 or position > 1:
+                    raise ValueError("max_position_pcts must be within (0, 1]")
+                params = {**candidate.params, "max_position_pct": position}
+                candidates.append(
+                    MomentumCandidate(
+                        name=f"{candidate.name}_pos{position:g}".replace(".", "p"),
+                        signal_type=candidate.signal_type,
+                        params=params,
+                    )
+                )
+    else:
+        candidates = base_candidates
     if not candidates:
         raise ValueError("No momentum candidates generated")
     return candidates
@@ -84,18 +186,55 @@ def make_candidates(config: dict[str, Any]) -> list[MomentumCandidate]:
 
 def build_signal(signal_frame: pd.DataFrame, candidate: MomentumCandidate) -> pd.Series:
     close = signal_frame["close"]
-    if candidate.signal_type in {"rsi_momentum", "rsi_mean_reversion"}:
+    if candidate.signal_type in {
+        "rsi_momentum",
+        "rsi_mean_reversion",
+        "rsi_long_flat_momentum",
+        "rsi_long_flat_mean_reversion",
+    }:
         values = rsi(close, int(candidate.params["window"]))
-        signal = pd.Series(0.0, index=signal_frame.index)
+        signal = pd.Series(np.nan, index=signal_frame.index)
         low = float(candidate.params["low"])
         high = float(candidate.params["high"])
         if candidate.signal_type == "rsi_momentum":
             signal[values > high] = 1.0
             signal[values < low] = -1.0
-        else:
+        elif candidate.signal_type == "rsi_mean_reversion":
             signal[values < low] = 1.0
             signal[values > high] = -1.0
-        return signal.replace(0, np.nan).ffill().fillna(0.0)
+        elif candidate.signal_type == "rsi_long_flat_momentum":
+            signal[values > high] = 1.0
+            signal[values < low] = 0.0
+        else:
+            signal[values < low] = 1.0
+            signal[values > high] = 0.0
+        return signal.ffill().fillna(0.0)
+
+    if candidate.signal_type in {"donchian_long_short", "donchian_long_only"}:
+        window = int(candidate.params["window"])
+        upper = signal_frame["high"].rolling(window, min_periods=window).max().shift(1)
+        lower = signal_frame["low"].rolling(window, min_periods=window).min().shift(1)
+        signal = pd.Series(np.nan, index=signal_frame.index)
+        signal[close > upper] = 1.0
+        signal[close < lower] = -1.0 if candidate.signal_type == "donchian_long_short" else 0.0
+        return signal.ffill().fillna(0.0)
+
+    if candidate.signal_type in {"rsi_ema_momentum", "rsi_ema_long_only"}:
+        values = rsi(close, int(candidate.params["window"]))
+        fast = int(candidate.params["fast"])
+        slow = int(candidate.params["slow"])
+        fast_ema = close.ewm(span=fast, adjust=False, min_periods=slow).mean()
+        slow_ema = close.ewm(span=slow, adjust=False, min_periods=slow).mean()
+        signal = pd.Series(np.nan, index=signal_frame.index)
+        low = float(candidate.params["low"])
+        high = float(candidate.params["high"])
+        long_condition = (values > high) & (fast_ema > slow_ema)
+        signal[long_condition] = 1.0
+        if candidate.signal_type == "rsi_ema_momentum":
+            signal[(values < low) & (fast_ema < slow_ema)] = -1.0
+        else:
+            signal[(values < low) | (fast_ema < slow_ema)] = 0.0
+        return signal.ffill().fillna(0.0)
 
     fast = int(candidate.params["fast"])
     slow = int(candidate.params["slow"])
@@ -108,9 +247,14 @@ def build_signal(signal_frame: pd.DataFrame, candidate: MomentumCandidate) -> pd
     raise ValueError(f"Unsupported signal_type: {candidate.signal_type}")
 
 
-def backtest_signal(base_frame: pd.DataFrame, signal: pd.Series, config: dict[str, Any]) -> tuple[pd.Series, pd.DataFrame]:
+def backtest_signal(
+    base_frame: pd.DataFrame,
+    signal: pd.Series,
+    config: dict[str, Any],
+    max_position_pct: float | None = None,
+) -> tuple[pd.Series, pd.DataFrame]:
     execution = config["execution"]
-    max_position = float(execution["max_position_pct"])
+    max_position = float(execution["max_position_pct"] if max_position_pct is None else max_position_pct)
     if max_position <= 0 or max_position > 1:
         raise ValueError("max_position_pct must be within (0, 1]")
     fee_rate = float(execution["fee_rate"])
@@ -121,44 +265,31 @@ def backtest_signal(base_frame: pd.DataFrame, signal: pd.Series, config: dict[st
     raw_position = signal.reindex(base_frame.index, method="ffill").fillna(0.0).clip(-1, 1)
     returns = base_frame["close"].pct_change().shift(-1).fillna(0.0)
 
-    position_values: list[float] = []
-    turnover_values: list[float] = []
-    strategy_return_values: list[float] = []
-    gross_return_values: list[float] = []
-    cost_values: list[float] = []
-    killed_values: list[int] = []
-    equity_values: list[float] = []
-    previous_position = 0.0
-    current_equity = 1.0
-    peak_equity = 1.0
-    killed = False
-
-    for timestamp in base_frame.index:
-        desired_position = 0.0 if killed else float(raw_position.loc[timestamp]) * max_position
-        turnover = abs(desired_position - previous_position)
-        cost = turnover * (fee_rate + slippage_pct)
-        gross_return = desired_position * float(returns.loc[timestamp])
-        strategy_return = gross_return - cost
-        current_equity *= 1 + strategy_return
-        peak_equity = max(peak_equity, current_equity)
-        drawdown = current_equity / peak_equity - 1
-        if drawdown <= -max_total_loss_pct:
-            killed = True
-        position_values.append(desired_position)
-        turnover_values.append(turnover)
-        strategy_return_values.append(strategy_return)
-        gross_return_values.append(gross_return)
-        cost_values.append(cost)
-        killed_values.append(int(killed))
-        equity_values.append(current_equity)
-        previous_position = desired_position
-
-    position = pd.Series(position_values, index=base_frame.index)
-    turnover = pd.Series(turnover_values, index=base_frame.index)
-    strategy_returns = pd.Series(strategy_return_values, index=base_frame.index)
-    gross_returns = pd.Series(gross_return_values, index=base_frame.index)
-    costs = pd.Series(cost_values, index=base_frame.index)
-    equity = pd.Series(equity_values, index=base_frame.index)
+    position = raw_position * max_position
+    turnover = position.diff().abs()
+    if not turnover.empty:
+        turnover.iloc[0] = abs(float(position.iloc[0]))
+    costs = turnover * (fee_rate + slippage_pct)
+    gross_returns = position * returns
+    strategy_returns = gross_returns - costs
+    equity = (1 + strategy_returns).cumprod()
+    drawdown = equity / equity.cummax().clip(lower=1.0) - 1
+    killed = drawdown.le(-max_total_loss_pct)
+    if killed.any():
+        kill_pos = int(np.flatnonzero(killed.to_numpy())[0])
+        position = position.copy()
+        position.iloc[kill_pos + 1 :] = 0.0
+        turnover = position.diff().abs()
+        if not turnover.empty:
+            turnover.iloc[0] = abs(float(position.iloc[0]))
+        costs = turnover * (fee_rate + slippage_pct)
+        gross_returns = position * returns
+        strategy_returns = gross_returns - costs
+        equity = (1 + strategy_returns).cumprod()
+        killed_values = np.zeros(len(base_frame), dtype=int)
+        killed_values[kill_pos:] = 1
+    else:
+        killed_values = np.zeros(len(base_frame), dtype=int)
     trades = pd.DataFrame(
         {
             "position": position,
@@ -175,11 +306,12 @@ def backtest_signal(base_frame: pd.DataFrame, signal: pd.Series, config: dict[st
 
 def summarize(equity: pd.Series, trades: pd.DataFrame) -> dict[str, Any]:
     returns = trades["strategy_return"]
-    drawdown = equity / equity.cummax() - 1
+    drawdown = equity / equity.cummax().clip(lower=1.0) - 1
     turnover_events = trades["turnover"].gt(0)
     active = trades["position"].abs().gt(0)
     return {
         "total_return": float(equity.iloc[-1] - 1),
+        "monthly_return": monthly_return_from_equity(equity),
         "expectancy_per_bar": float(returns.mean()),
         "realized_pnl": float(equity.iloc[-1] - 1),
         "max_drawdown": float(drawdown.min()),
@@ -200,17 +332,19 @@ def evaluate_candidate(
     config: dict[str, Any],
 ) -> list[dict[str, Any]]:
     signal = build_signal(signal_frame, candidate)
+    max_position_pct = candidate.params.get("max_position_pct")
     rows: list[dict[str, Any]] = []
     for split_name, index in split_indexes.items():
         split_frame = base_frame.loc[index]
         if split_frame.empty:
             raise ValueError(f"Empty split for {split_name}")
-        split_equity, split_trades = backtest_signal(split_frame, signal, config)
+        split_equity, split_trades = backtest_signal(split_frame, signal, config, max_position_pct=max_position_pct)
         rows.append(
             {
                 "name": candidate.name,
                 "signal_type": candidate.signal_type,
                 "params": json.dumps(candidate.params, sort_keys=True),
+                "max_position_pct": float(max_position_pct or config["execution"]["max_position_pct"]),
                 "split": split_name,
                 **summarize(split_equity, split_trades),
             }
@@ -228,8 +362,8 @@ def select_best(validation_summary: pd.DataFrame, config: dict[str, Any]) -> dic
     if eligible.empty:
         eligible = validation_summary.copy()
     eligible = eligible.sort_values(
-        by=["total_return", "max_drawdown", "trades"],
-        ascending=[False, False, True],
+        by=["monthly_return", "total_return", "max_drawdown", "trades"],
+        ascending=[False, False, False, True],
     )
     selected = eligible.iloc[0].to_dict()
     selected["selected_from_validation_only"] = True

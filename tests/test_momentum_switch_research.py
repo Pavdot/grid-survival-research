@@ -39,12 +39,36 @@ class MomentumSwitchResearchTests(unittest.TestCase):
         self.assertTrue(any(candidate.signal_type == "rsi_momentum" for candidate in candidates))
         self.assertTrue(any(candidate.signal_type == "ema_long_short" for candidate in candidates))
 
+    def test_candidate_generation_can_include_long_flat_rsi(self) -> None:
+        config = momentum_config()
+        config["search"]["include_rsi_long_flat"] = True
+        config["search"]["include_rsi_ema_long_only"] = True
+        config["search"]["rsi_ema_windows"] = [14]
+        config["search"]["rsi_ema_threshold_pairs"] = [[35, 65]]
+        config["search"]["rsi_ema_fast_windows"] = [10]
+        config["search"]["rsi_ema_slow_windows"] = [100]
+        candidates = make_candidates(config)
+        self.assertTrue(any(candidate.signal_type == "rsi_long_flat_momentum" for candidate in candidates))
+        self.assertTrue(any(candidate.signal_type == "rsi_ema_long_only" for candidate in candidates))
+
     def test_rsi_signal_uses_bounded_positions(self) -> None:
         index = pd.date_range("2024-01-01", periods=40, freq="1h", tz="UTC")
         frame = pd.DataFrame({"close": list(range(20)) + list(range(20, 0, -1))}, index=index)
         candidate = MomentumCandidate("rsi_momentum_14_35_65", "rsi_momentum", {"window": 14, "low": 35, "high": 65})
         signal = build_signal(frame, candidate)
         self.assertLessEqual(signal.abs().max(), 1.0)
+
+    def test_long_flat_rsi_never_shorts(self) -> None:
+        index = pd.date_range("2024-01-01", periods=60, freq="1h", tz="UTC")
+        frame = pd.DataFrame({"close": list(range(30)) + list(range(30, 0, -1))}, index=index)
+        candidate = MomentumCandidate(
+            "rsi_long_flat_momentum_14_35_65",
+            "rsi_long_flat_momentum",
+            {"window": 14, "low": 35, "high": 65},
+        )
+        signal = build_signal(frame, candidate)
+        self.assertGreaterEqual(signal.min(), 0.0)
+        self.assertLessEqual(signal.max(), 1.0)
 
     def test_backtest_applies_costs_on_position_changes(self) -> None:
         index = pd.date_range("2024-01-01", periods=4, freq="5min", tz="UTC")
