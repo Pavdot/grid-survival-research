@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Grid Survival Research daily jobs
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+Persistent=true
+AccuracySec=5min
+Unit=grid-survival-daily.service
+
+[Install]
+WantedBy=timers.target

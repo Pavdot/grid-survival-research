@@ -1,0 +1,53 @@
+collector:
+  name: btcusdt_depth_collector
+  symbol: BTCUSDT
+  websocket_url: wss://data-stream.binance.vision/ws/btcusdt@depth@1000ms
+  rest_base_urls:
+    - https://api.binance.com
+    - https://data-api.binance.vision
+  rest_depth_endpoint: /api/v3/depth
+  rest_depth_limit: 1000
+  timeout_seconds: 10
+  snapshot_interval_seconds: 1
+  flush_every_rows: 60
+  max_buffered_events: 1000
+  depth_bands_bps: [1, 2, 5, 10]
+  top_levels_to_store: 500
+  output_dir: data/microstructure/ws_depth
+  health_path: data/microstructure/ws_depth/btcusdt_collector_health.json
+  reconnect_backoff_seconds: 5
+  max_snapshot_age_seconds_for_health: 15
+
+ops:
+  reports_dir: reports/infra
+  disk_path: .
+  disk_warn_fraction: 0.80
+  max_parquet_age_seconds: 120
+  telegram:
+    enabled: true
+    token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+  backup:
+    enabled: true
+    rclone_remote_env: RCLONE_REMOTE
+    manifest_dir: reports/infra/backups
+    include_paths:
+      - data/microstructure/ws_depth
+      - data/processed
+      - reports/research_iterations
+
+quality:
+  output_dir: reports/infra/microstructure_quality
+  expected_interval_seconds: 1
+  gap_warn_seconds: 5
+  stale_bad_seconds: 60
+  min_coverage_ratio_healthy: 0.95
+  min_coverage_ratio_degraded: 0.80
+  max_invalid_fraction_healthy: 0.01
+  max_invalid_fraction_degraded: 0.05
+
+paper:
+  output_dir: reports/paper_trading
+  max_collector_age_seconds: 20
+  blackout_windows_path: reports/research_iterations/iteration_017_fundamental_trend_escape_best_policy_expanded/blackout_windows.csv
+  account_equity_usdt_grid: [1000, 5000, 10000, 25000]

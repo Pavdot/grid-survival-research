@@ -1,0 +1,14 @@
+paper:
+  name: paper_only_017_microstructure_policy
+  output_dir: reports/paper_trading
+  infrastructure_config: config/infrastructure_microstructure.yaml
+  policy_config: config/research_iteration_microstructure_order_policy_017.yaml
+  max_collector_age_seconds: 20
+  default_policy: maker_entry_add_taker_exit
+  account_equity_usdt_grid: [1000, 5000, 10000, 25000]
+  blackout_windows_path: reports/research_iterations/iteration_017_fundamental_trend_escape_best_policy_expanded/blackout_windows.csv
+  private_env_vars:
+    - BINANCE_API_KEY
+    - BINANCE_SECRET_KEY
+    - BINANCE_API_SECRET
+  live_trading_env_var: LIVE_TRADING_ENABLED

@@ -90,6 +90,33 @@ python -m src.research.xauusd_blackout_ablation_research --max-candidates 10 --e
 All research iterations write local outputs under `reports/research_iterations/`, which
 is ignored by Git except for the directory placeholder.
 
+## Research Infrastructure
+
+The repo includes a Docker Compose setup for research-only BTCUSDT
+microstructure collection and evaluation. It collects public Binance market data
+only; it does not place orders and does not use API keys.
+
+```bash
+docker compose up -d collector-btcusdt-depth
+docker compose run --rm research-runner python -m src.research.microstructure_order_policy_017 --evaluate-policies
+docker compose run --rm quality-dashboard
+docker compose run --rm daily-evaluation
+docker compose run --rm paper-runner
+```
+
+Infrastructure iterations:
+
+```powershell
+python -m src.infra.binance_microstructure_collector --healthcheck
+python -m src.infra.ops_monitor --healthcheck
+python -m src.infra.microstructure_quality_report --days 7
+python -m src.research.rolling_execution_evaluation --smoke
+python -m src.paper.paper_trading_harness --run-once
+```
+
+See `docs/INFRASTRUCTURE.md` for VPS deployment, healthchecks, backups, and
+systemd autostart.
+
 ## Outputs
 
 - `data/processed/btcusdt_5m.parquet`

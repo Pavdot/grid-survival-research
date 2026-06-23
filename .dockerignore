@@ -1,0 +1,17 @@
+.git
+.pytest_cache
+.mypy_cache
+.ruff_cache
+__pycache__
+*.pyc
+.venv
+venv
+data/raw/*
+data/processed/*
+data/features/*
+data/labels/*
+data/microstructure/*
+reports/backtests/*
+reports/figures/*
+reports/model_reports/*
+reports/research_iterations/*

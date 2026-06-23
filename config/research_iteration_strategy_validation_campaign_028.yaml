@@ -1,0 +1,90 @@
+iteration:
+  name: iteration_028_strategy_validation_campaign
+  output_dir: reports/research_iterations/iteration_028_strategy_validation_campaign
+
+target:
+  robust_monthly_return: 0.13
+  aspirational_monthly_return: 0.20
+  min_positive_fold_rate: 0.60
+  min_improvement_vs_017: 0.001
+
+cpcv:
+  block_count: 6
+  test_block_count: 2
+  purge_adjacent_blocks: 1
+
+monte_carlo:
+  iterations: 5000
+  seed: 42
+
+execution:
+  worst_case_iteration_dir: reports/research_iterations/iteration_019_execution_worst_case_audit
+  surface_iteration_dir: reports/research_iterations/iteration_020_execution_surface_017
+  protected_fee_max: 0.0001
+  protected_slippage_bps_max: 0.5
+  protected_fill_rate_min: 0.99
+
+families:
+  - family: baseline_017_locked
+    source_iteration_dir: reports/research_iterations/iteration_017_fundamental_trend_escape_best_policy_expanded
+    source_variant: fundamental_trend_escape_entry_only
+    wave: locked_baseline
+    family_type: baseline
+    execution_proxy: locked_017
+    surface_proxy: locked_017
+  - family: fundamental_timing_v2
+    source_iteration_dir: reports/research_iterations/iteration_016_fundamental_trend_escape_martingale
+    source_variant: fundamental_event_entry_only
+    wave: wave_1_filters
+    family_type: fundamental
+    execution_proxy: none
+    surface_proxy: none
+  - family: trend_escape_v2
+    source_iteration_dir: reports/research_iterations/iteration_016_fundamental_trend_escape_martingale
+    source_variant: trend_escape_entry_only
+    wave: wave_1_filters
+    family_type: regime
+    execution_proxy: none
+    surface_proxy: none
+  - family: fundamental_trend_escape_v2
+    source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+    source_variant: fundamental_trend_escape_entry_only
+    wave: wave_2_neighbor
+    family_type: fundamental_regime
+    execution_proxy: locked_017
+    surface_proxy: locked_017
+  - family: range_break_classifier_v2
+    source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+    source_variant: classifier_entry_only
+    wave: wave_2_classifier
+    family_type: classifier
+    execution_proxy: none
+    surface_proxy: none
+  - family: hybrid_score_entry_only
+    source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+    source_variant: classifier_entry_add_emergency_exit_high
+    wave: wave_3_hybrid
+    family_type: hybrid
+    execution_proxy: none
+    surface_proxy: none
+  - family: hybrid_score_entry_add_block
+    source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+    source_variant: classifier_entry_add_block
+    wave: wave_3_hybrid
+    family_type: hybrid
+    execution_proxy: none
+    surface_proxy: none
+  - family: execution_aware_high_cost_029
+    source_iteration_dir: reports/research_iterations/iteration_029_execution_aware_strategy_search
+    source_variant: fundamental_trend_escape_entry_only
+    wave: wave_4_execution_cost
+    family_type: execution_aware_grid
+    execution_proxy: self_cost_selected
+    surface_proxy: none
+  - family: moderate_execution_search_030
+    source_iteration_dir: reports/research_iterations/iteration_030_moderate_execution_strategy_search
+    source_variant: fundamental_trend_escape_entry_only
+    wave: wave_4_execution_cost
+    family_type: execution_aware_grid
+    execution_proxy: self_cost_selected
+    surface_proxy: none

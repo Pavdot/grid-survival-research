@@ -25,3 +25,10 @@ reports/model_reports/*
 !reports/model_reports/.gitkeep
 reports/research_iterations/*
 !reports/research_iterations/.gitkeep
+reports/infra/*
+!reports/infra/.gitkeep
+reports/paper_trading/*
+!reports/paper_trading/.gitkeep
+backups/*
+!backups/.gitkeep
+.env

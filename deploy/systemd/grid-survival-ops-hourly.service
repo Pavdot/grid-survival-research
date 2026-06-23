@@ -1,0 +1,11 @@
+[Unit]
+Description=Grid Survival Research hourly ops healthcheck
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/grid-survival-research
+EnvironmentFile=-/etc/grid-survival-research.env
+ExecStart=/usr/bin/docker compose run --rm ops-monitor python -m src.infra.ops_monitor --healthcheck

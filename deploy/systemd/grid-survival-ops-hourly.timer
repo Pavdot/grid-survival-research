@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Grid Survival Research ops healthcheck hourly
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+AccuracySec=1min
+Unit=grid-survival-ops-hourly.service
+
+[Install]
+WantedBy=timers.target

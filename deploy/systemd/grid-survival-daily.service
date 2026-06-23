@@ -1,0 +1,14 @@
+[Unit]
+Description=Grid Survival Research daily quality, evaluation and backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/grid-survival-research
+EnvironmentFile=-/etc/grid-survival-research.env
+ExecStart=/usr/bin/docker compose run --rm quality-dashboard
+ExecStart=/usr/bin/docker compose run --rm daily-evaluation
+ExecStart=/usr/bin/docker compose run --rm ops-monitor python -m src.infra.ops_monitor --write-daily-report
+ExecStart=/usr/bin/docker compose run --rm ops-monitor python -m src.infra.ops_monitor --backup

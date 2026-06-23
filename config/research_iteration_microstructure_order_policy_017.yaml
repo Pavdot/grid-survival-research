@@ -1,0 +1,52 @@
+iteration:
+  name: iteration_022_microstructure_order_policy_017
+  output_dir: reports/research_iterations/iteration_022_microstructure_order_policy_017
+
+source_iteration:
+  config_path: config/research_iteration_fundamental_trend_escape_best_policy_expanded.yaml
+  output_dir: reports/research_iterations/iteration_017_fundamental_trend_escape_best_policy_expanded
+  variant: fundamental_trend_escape_entry_only
+  reference_monthly_return: 0.13433973204507899
+
+asset: BTCUSDT
+
+collection:
+  base_urls:
+    - https://api.binance.com
+    - https://data-api.binance.vision
+  depth_endpoint: /api/v3/depth
+  book_ticker_endpoint: /api/v3/ticker/bookTicker
+  depth_limit: 500
+  timeout_seconds: 10
+  snapshot_path: data/microstructure/btcusdt_order_book_snapshots.parquet
+
+microstructure_gate:
+  account_equity_usdt_grid: [1000, 5000, 10000, 25000]
+  depth_band_bps: 5
+  depth_bands_bps: [1, 2, 5, 10]
+  max_spread_bps: 0.50
+  max_order_book_share: 0.05
+  min_side_depth_usdt_floor: 250000
+  max_abs_depth_imbalance: 0.35
+  max_snapshot_age_ms: 2000
+  max_theoretical_slippage_bps: 1.0
+
+order_policy:
+  policies:
+    - gate_only_taker
+    - sliced_taker
+    - maker_entry_add_taker_exit
+    - maker_all_non_forced
+  max_clip_book_share: 0.01
+  max_total_book_share: 0.05
+  maker_ttl_seconds: 10
+  max_reprices: 5
+  synthetic_mapping_seed: 22017
+
+verdict:
+  min_collection_hours_live_ready: 24
+  max_invalid_snapshot_fraction: 0.05
+  max_p90_slippage_bps_promising: 1.0
+  max_entry_skipped_rate_promising: 0.15
+  promising_equity_ceiling: 10000
+  adjusted_monthly_floor: 0.13

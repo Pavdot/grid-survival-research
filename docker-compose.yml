@@ -1,0 +1,130 @@
+services:
+  collector-btcusdt-depth:
+    build: .
+    image: grid-survival-research:latest
+    container_name: grid-survival-collector-btcusdt-depth
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - src.infra.binance_microstructure_collector
+      - --run
+      - --config
+      - config/infrastructure_microstructure.yaml
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - src.infra.binance_microstructure_collector
+        - --healthcheck
+        - --config
+        - config/infrastructure_microstructure.yaml
+        - --max-age-seconds
+        - "20"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  research-runner:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    command:
+      - python
+      - -m
+      - src.research.microstructure_order_policy_017
+      - --evaluate-policies
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+
+  ops-monitor:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      RCLONE_REMOTE: ${RCLONE_REMOTE:-}
+    command:
+      - python
+      - -m
+      - src.infra.ops_monitor
+      - --healthcheck
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+
+  daily-evaluation:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      RCLONE_REMOTE: ${RCLONE_REMOTE:-}
+    command:
+      - python
+      - -m
+      - src.research.rolling_execution_evaluation
+      - --days
+      - "7"
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+
+  quality-dashboard:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    command:
+      - python
+      - -m
+      - src.infra.microstructure_quality_report
+      - --days
+      - "7"
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+
+  paper-runner:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    environment:
+      LIVE_TRADING_ENABLED: ${LIVE_TRADING_ENABLED:-false}
+    command:
+      - python
+      - -m
+      - src.paper.paper_trading_harness
+      - --run-once
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+
+  report-server:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    command:
+      - python
+      - -m
+      - http.server
+      - "8000"
+      - --directory
+      - reports
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./reports:/app/reports:ro
