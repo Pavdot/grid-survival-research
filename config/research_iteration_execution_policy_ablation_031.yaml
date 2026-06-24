@@ -1,0 +1,21 @@
+iteration:
+  name: iteration_031_execution_policy_ablation
+  output_dir: reports/research_iterations/iteration_031_execution_policy_ablation
+
+sources:
+  nested_walk_forward_dir: reports/research_iterations/iteration_030_execution_aware_nested_walk_forward
+  conditional_execution_dir: reports/research_iterations/iteration_029b_conditional_execution_measurement
+
+ablation:
+  baseline_policy: gate_only_taker
+  primary_equity_usdt: 10000
+  policies:
+    - taker_only
+    - gate_only_taker
+    - sliced_taker
+    - maker_entry_add_taker_exit
+    - maker_all_non_forced
+    - maker_no_chase
+  min_net_p10_improvement: 0.0
+  min_net_median_improvement: 0.0
+  max_entry_rejected_rate: 0.35

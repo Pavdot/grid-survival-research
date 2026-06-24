@@ -1,0 +1,110 @@
+iteration:
+  name: zero_fee_venue_sensitivity_034
+  output_root: research_evidence
+
+asset: btcusdt
+
+data:
+  market_5m_path: data/processed/btcusdt_5m.parquet
+  signal_1h_path: data/processed/btcusdt_1h.parquet
+  min_coverage_rate: 0.99
+  bar_minutes: 5
+  require_full_signal_hours: true
+
+reporting:
+  account_equity_usdt: 10000
+
+walk_forward:
+  train_days: 180
+  test_days: 30
+  step_days: 30
+  embargo_bars: 72
+  holdout_days: 90
+
+source_policy:
+  name: fundamental_trend_escape_v2
+  source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+  source_variant: fundamental_trend_escape_entry_only
+  policy_kind: fundamental_trend_escape_entry_only
+
+scenarios:
+  - name: realistic_control_fee40_slip2
+    fee_rate: 0.0004
+    slippage_bps: 2.0
+    maker_missed_fill_penalty: 0.0
+    venue_note: current_realistic_control
+  - name: zero_fee_taker_0bps
+    fee_rate: 0.0
+    slippage_bps: 0.0
+    maker_missed_fill_penalty: 0.0
+    venue_note: ideal_zero_fee_taker_upper_bound
+  - name: zero_fee_taker_0p25bps
+    fee_rate: 0.0
+    slippage_bps: 0.25
+    maker_missed_fill_penalty: 0.0
+    venue_note: zero_fee_low_slippage
+  - name: zero_fee_taker_0p5bps
+    fee_rate: 0.0
+    slippage_bps: 0.5
+    maker_missed_fill_penalty: 0.0
+    venue_note: zero_fee_moderate_slippage
+  - name: zero_fee_taker_1bps
+    fee_rate: 0.0
+    slippage_bps: 1.0
+    maker_missed_fill_penalty: 0.0
+    venue_note: zero_fee_high_slippage
+  - name: zero_fee_maker_miss10
+    fee_rate: 0.0
+    slippage_bps: 0.0
+    maker_missed_fill_penalty: 0.10
+    venue_note: maker_zero_fee_proxy_10pct_positive_pnl_penalty
+  - name: zero_fee_maker_miss20
+    fee_rate: 0.0
+    slippage_bps: 0.0
+    maker_missed_fill_penalty: 0.20
+    venue_note: maker_zero_fee_proxy_20pct_positive_pnl_penalty
+  - name: zero_fee_maker_miss35
+    fee_rate: 0.0
+    slippage_bps: 0.0
+    maker_missed_fill_penalty: 0.35
+    venue_note: maker_zero_fee_proxy_35pct_positive_pnl_penalty
+
+decision:
+  robust_monthly_p10_min: 0.0
+  positive_monthly_min: 0.0
+  max_drawdown_block: -0.35
+  holdout_min_total_return: -0.10
+
+fundamental_blackout:
+  enabled: true
+  use_default_seed: true
+  events_path:
+  pre_event_hours: 24
+  post_event_hours: 24
+  surprise_reaction_hours: 48
+  oracle_pre_event_hours: 24
+  min_severity: 4
+  categories:
+    - macro_fomc
+    - macro_cpi
+    - macro_jobs
+    - macro_ppi
+    - crypto_regulatory
+    - exchange_hack
+    - stablecoin_depeg
+    - etf_news
+    - major_liquidation
+    - halving
+
+trend_escape:
+  range_lookback_bars: 48
+  breakout_atr_buffer: 0.25
+  confirmation_bars: 2
+  min_confirmations: 1
+  delay_bars: 1
+  propagation_bars: 36
+  require_compression: false
+  min_abs_trend_alignment: 0.75
+  min_range_expansion_ratio: 1.30
+  min_realized_volatility_ratio: 1.30
+  include_existing_breakout_risk: false

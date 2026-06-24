@@ -1,0 +1,124 @@
+iteration:
+  name: cost_budget_hypothesis_ablation_033
+  output_root: research_evidence
+
+asset: btcusdt
+
+data:
+  market_5m_path: data/processed/btcusdt_5m.parquet
+  signal_1h_path: data/processed/btcusdt_1h.parquet
+  min_coverage_rate: 0.99
+  bar_minutes: 5
+  require_full_signal_hours: true
+
+reporting:
+  account_equity_usdt: 10000
+
+walk_forward:
+  train_days: 180
+  test_days: 30
+  step_days: 30
+  embargo_bars: 72
+  holdout_days: 90
+
+source_policy:
+  name: fundamental_trend_escape_v2
+  source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+  source_variant: fundamental_trend_escape_entry_only
+  policy_kind: fundamental_trend_escape_entry_only
+
+scenario:
+  name: realistic_timing_costs
+  engine: audit
+  entry_execution_mode: next_bar_open
+  signal_lag_bars: 1
+  mask_lag_bars: 1
+  fee_rate: 0.0004
+  slippage_bps: 2
+
+target:
+  candidate_v3_monthly_p10: 0.0
+  max_drawdown: -0.35
+  max_cost_pct_per_month: 0.05
+  min_grids_per_month: 2
+  holdout_min_total_return: -0.10
+
+hypotheses:
+  H1_cost_budget:
+    max_cost_pct_per_month: 0.05
+    max_notional_turnover_per_month: 80
+  H2_entry_reduction:
+    cooldown_hours: [6, 12, 24]
+    rsi_threshold_pairs:
+      - [35, 65]
+      - [30, 70]
+    max_grids_per_month: [15, 25, 35]
+  H3_wider_tp:
+    take_profit_spacing_multipliers: [4, 5, 6, 8]
+    min_expected_net_tp_to_roundtrip_cost: 3.0
+  H4_reduced_martingale:
+    max_notional_caps: [5, 10, 15]
+    max_levels: [2, 3]
+    progression_multipliers: [1.15, 1.25, 1.35]
+    base_size_safety: 0.95
+  H5_maker_first_proxy:
+    maker_fee_rate: 0.0002
+    maker_slippage_bps: 0.25
+    missed_fill_penalties: [0.10, 0.20, 0.35]
+
+families:
+  - baseline_realistic
+  - H1_cost_budget
+  - H2_entry_reduction
+  - H3_wider_tp
+  - H4_reduced_martingale
+  - H5_maker_first_proxy
+  - H1_H2
+  - H1_H3
+  - H1_H4
+  - H2_H3_H4
+  - H1_H2_H3_H4
+  - all_plus_maker_proxy
+
+fundamental_blackout:
+  enabled: true
+  use_default_seed: true
+  events_path:
+  pre_event_hours: 24
+  post_event_hours: 24
+  surprise_reaction_hours: 48
+  oracle_pre_event_hours: 24
+  min_severity: 4
+  categories:
+    - macro_fomc
+    - macro_cpi
+    - macro_jobs
+    - macro_ppi
+    - crypto_regulatory
+    - exchange_hack
+    - stablecoin_depeg
+    - etf_news
+    - major_liquidation
+    - halving
+
+trend_escape:
+  range_lookback_bars: 48
+  breakout_atr_buffer: 0.25
+  confirmation_bars: 2
+  min_confirmations: 1
+  delay_bars: 1
+  propagation_bars: 36
+  require_compression: false
+  min_abs_trend_alignment: 0.75
+  min_range_expansion_ratio: 1.30
+  min_realized_volatility_ratio: 1.30
+  include_existing_breakout_risk: false
+
+search:
+  search_entry_stride_bars: 24
+  max_sample_positions_per_candidate: 30
+  max_universe_per_family: 80
+  smoke_max_universe_per_family: 12
+
+selection:
+  uses_drawdown: false

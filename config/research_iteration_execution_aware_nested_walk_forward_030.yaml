@@ -1,0 +1,19 @@
+iteration:
+  name: iteration_030_execution_aware_nested_walk_forward
+  output_dir: reports/research_iterations/iteration_030_execution_aware_nested_walk_forward
+
+sources:
+  validation_campaign_dir: reports/research_iterations/iteration_028_strategy_validation_campaign
+  conditional_execution_dir: reports/research_iterations/iteration_029b_conditional_execution_measurement
+  allowed_families:
+    - fundamental_trend_escape_v2
+    - range_break_classifier_v2
+
+decision:
+  primary_equity_usdt: 10000
+  p10_net_monthly_min: 0.0
+  median_net_monthly_min: 0.0
+  max_drawdown_floor: -0.35
+  max_rejected_entry_rate: 0.35
+  exact_coverage_threshold: 0.80
+  ruin_rate_max: 0.0

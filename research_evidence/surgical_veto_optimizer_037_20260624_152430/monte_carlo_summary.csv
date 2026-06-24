@@ -1,0 +1,4 @@
+method,monthly_median,monthly_p05,positive_probability,ruin_probability
+fold_bootstrap,0.24043991816954097,0.13281416988933864,1.0,0.0
+fold_block_bootstrap,0.25626388257673083,0.1575657261405525,1.0,0.0
+trade_bootstrap,0.23442345512125526,0.10963053400912974,1.0,0.0

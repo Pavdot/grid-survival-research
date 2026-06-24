@@ -1,0 +1,123 @@
+iteration:
+  name: surgical_veto_optimizer_037
+  output_root: research_evidence
+
+asset: btcusdt
+
+data:
+  market_5m_path: data/processed/btcusdt_5m.parquet
+  signal_1h_path: data/processed/btcusdt_1h.parquet
+  min_coverage_rate: 0.99
+  bar_minutes: 5
+
+reporting:
+  account_equity_usdt: 10000
+
+walk_forward:
+  train_days: 180
+  test_days: 30
+  step_days: 30
+  embargo_bars: 72
+  holdout_days: 90
+
+source_policy:
+  name: fundamental_trend_escape_v2
+  source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+  source_variant: fundamental_trend_escape_entry_only
+  policy_kind: fundamental_trend_escape_entry_only
+
+candidate_selection:
+  mode: historical_pool
+  max_historical_candidates: 12
+
+primary_scenario:
+  name: zero_fee_0p25bps
+  fee_rate: 0.0
+  slippage_bps: 0.25
+
+scenario_replay:
+  - name: zero_fee_0bps
+    fee_rate: 0.0
+    slippage_bps: 0.0
+    maker_missed_fill_penalty: 0.0
+  - name: zero_fee_0p25bps
+    fee_rate: 0.0
+    slippage_bps: 0.25
+    maker_missed_fill_penalty: 0.0
+  - name: zero_fee_0p5bps
+    fee_rate: 0.0
+    slippage_bps: 0.5
+    maker_missed_fill_penalty: 0.0
+  - name: zero_fee_1bps
+    fee_rate: 0.0
+    slippage_bps: 1.0
+    maker_missed_fill_penalty: 0.0
+  - name: zero_fee_maker_miss10
+    fee_rate: 0.0
+    slippage_bps: 0.0
+    maker_missed_fill_penalty: 0.10
+  - name: realistic_control_fee40_slip2
+    fee_rate: 0.0004
+    slippage_bps: 2.0
+    maker_missed_fill_penalty: 0.0
+
+veto_search:
+  max_policies: 80
+  range_expansion_thresholds: [0, 2.0, 2.5, 3.0]
+  realized_vol_thresholds: [0, 1.8, 2.2, 2.8]
+  atr_percentile_thresholds: [0, 0.95, 0.98]
+  use_breakout_risk: [false, true]
+  use_regime_disallow: [false, true]
+  max_grids_per_month: [90, 120, 999]
+  pause_after_forced_loss_hours: [0, 6, 12]
+  rolling_7d_loss_thresholds: [-999, -0.08, -0.12]
+  min_train_monthly_return: 0.05
+  min_train_monthly_p10: -0.02
+  min_baseline_return_retention: 0.75
+  min_baseline_order_retention: 0.70
+  min_p10_improvement: -0.02
+  max_drawdown: -0.40
+
+validation:
+  cpcv_blocks: 5
+  cpcv_test_blocks: 2
+  cpcv_purge_adjacent_blocks: true
+  monte_carlo_iterations: 2000
+  monte_carlo_seed: 37037
+  robust_monthly_p10_min: 0.0
+  min_monthly_return: 0.10
+  min_holdout_total_return: 0.0
+
+fundamental_blackout:
+  enabled: true
+  use_default_seed: true
+  events_path:
+  pre_event_hours: 24
+  post_event_hours: 24
+  surprise_reaction_hours: 48
+  oracle_pre_event_hours: 24
+  min_severity: 4
+  categories:
+    - macro_fomc
+    - macro_cpi
+    - macro_jobs
+    - macro_ppi
+    - crypto_regulatory
+    - exchange_hack
+    - stablecoin_depeg
+    - etf_news
+    - major_liquidation
+    - halving
+
+trend_escape:
+  range_lookback_bars: 48
+  breakout_atr_buffer: 0.25
+  confirmation_bars: 2
+  min_confirmations: 1
+  delay_bars: 1
+  propagation_bars: 36
+  require_compression: false
+  min_abs_trend_alignment: 0.75
+  min_range_expansion_ratio: 1.30
+  min_realized_volatility_ratio: 1.30
+  include_existing_breakout_risk: false

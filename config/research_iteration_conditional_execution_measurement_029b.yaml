@@ -1,0 +1,19 @@
+iteration:
+  name: iteration_029b_conditional_execution_measurement
+  output_dir: reports/research_iterations/iteration_029b_conditional_execution_measurement
+
+source:
+  iteration_018_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+  variants:
+    fundamental_trend_escape_v2: fundamental_trend_escape_entry_only
+    range_break_classifier_v2: classifier_entry_only
+
+microstructure:
+  policy_config: config/research_iteration_microstructure_order_policy_017.yaml
+  ws_depth_dir: data/microstructure/ws_depth
+  symbol: BTCUSDT
+  collection_days_required: 30
+  exact_coverage_threshold: 0.80
+  nearest_snapshot_max_age_ms: 60000
+  primary_equity_usdt: 10000
+  account_equity_usdt_grid: [1000, 5000, 10000, 25000]

@@ -29,6 +29,8 @@ reports/infra/*
 !reports/infra/.gitkeep
 reports/paper_trading/*
 !reports/paper_trading/.gitkeep
+research_evidence/*
+!research_evidence/.gitkeep
 backups/*
 !backups/.gitkeep
 .env

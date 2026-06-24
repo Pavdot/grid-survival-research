@@ -1,0 +1,10 @@
+iteration:
+  name: iteration_029a_cost_ledger_validation
+  output_dir: reports/research_iterations/iteration_029a_cost_ledger_validation
+
+ledger:
+  scenario_tolerance: 1.0e-10
+  aggregate_tolerance: 1.0e-8
+  default_fee_rate: 0.0001
+  default_slippage_bps: 0.5
+  default_spread_bps: 0.2

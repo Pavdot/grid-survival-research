@@ -1,0 +1,152 @@
+iteration:
+  name: revalidate_top3_distinct_policies
+  output_root: research_evidence
+
+asset: btcusdt
+
+data:
+  market_5m_path: data/processed/btcusdt_5m.parquet
+  signal_1h_path: data/processed/btcusdt_1h.parquet
+  min_coverage_rate: 0.99
+  bar_minutes: 5
+  signal_minutes: 60
+  require_full_signal_hours: true
+
+reporting:
+  account_equity_usdt: 10000
+
+target:
+  monthly_return: 0.20
+  max_drawdown: -0.35
+  min_exact_grids: 25
+  min_positive_fold_rate: 0.60
+  min_target_fold_rate: 0.60
+
+walk_forward:
+  train_days: 180
+  test_days: 30
+  step_days: 30
+  embargo_bars: 72
+  holdout_days: 90
+
+scenarios:
+  - name: legacy
+    engine: legacy
+    entry_execution_mode: current_close
+    signal_lag_bars: 0
+    mask_lag_bars: 0
+  - name: next_bar_lagged
+    engine: audit
+    entry_execution_mode: next_bar_open
+    signal_lag_bars: 1
+    mask_lag_bars: 1
+  - name: realistic_timing_costs
+    engine: audit
+    entry_execution_mode: next_bar_open
+    signal_lag_bars: 1
+    mask_lag_bars: 1
+    fee_rate: 0.0004
+    slippage_bps: 2
+
+selection_modes:
+  - locked_historical_replay
+  - train_only_reselection
+
+policies:
+  primary:
+    - name: baseline_017_locked
+      source_iteration_dir: reports/research_iterations/iteration_017_fundamental_trend_escape_best_policy_expanded
+      source_variant: fundamental_trend_escape_entry_only
+      policy_kind: fundamental_trend_escape_entry_only
+    - name: fundamental_trend_escape_v2
+      source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+      source_variant: fundamental_trend_escape_entry_only
+      policy_kind: fundamental_trend_escape_entry_only
+    - name: range_break_classifier_v2
+      source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+      source_variant: classifier_entry_only
+      policy_kind: classifier_entry_only
+  fallback_order:
+    - name: classifier_entry_add_block
+      source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+      source_variant: classifier_entry_add_block
+      policy_kind: classifier_entry_add_block
+    - name: fundamental_timing_v2
+      source_iteration_dir: reports/research_iterations/iteration_016_fundamental_trend_escape_martingale
+      source_variant: fundamental_event_entry_only
+      policy_kind: fundamental_event_entry_only
+    - name: hybrid_score_entry_add_block
+      source_iteration_dir: reports/research_iterations/iteration_018_range_break_classifier_martingale
+      source_variant: classifier_entry_add_block
+      policy_kind: classifier_entry_add_block
+    - name: trend_escape_v2
+      source_iteration_dir: reports/research_iterations/iteration_016_fundamental_trend_escape_martingale
+      source_variant: trend_escape_entry_only
+      policy_kind: trend_escape_entry_only
+
+range_break_classifier:
+  internal_split:
+    model_train_days: 120
+    selection_days: 60
+  emergency_exit_threshold: 0.90
+  max_iter: 120
+  learning_rate: 0.06
+  max_leaf_nodes: 15
+  l2_regularization: 0.05
+  random_state: 42
+  permutation_importance:
+    enabled: false
+
+range_break_label:
+  primary_horizon_hours: 6
+  diagnostic_horizons_hours: [6, 12, 24]
+  bar_minutes: 5
+  range_lookback_bars: 48
+  breakout_atr_buffer: 0.25
+  extension_atr: 0.75
+  min_persistent_closes: 2
+  min_abs_trend_alignment: 0.65
+  min_range_expansion_ratio: 1.25
+  min_realized_volatility_ratio: 1.25
+
+fundamental_blackout:
+  enabled: true
+  use_default_seed: true
+  events_path:
+  pre_event_hours: 24
+  post_event_hours: 24
+  surprise_reaction_hours: 48
+  oracle_pre_event_hours: 24
+  min_severity: 4
+  categories:
+    - macro_fomc
+    - macro_cpi
+    - macro_jobs
+    - macro_ppi
+    - crypto_regulatory
+    - exchange_hack
+    - stablecoin_depeg
+    - etf_news
+    - major_liquidation
+    - halving
+
+trend_escape:
+  range_lookback_bars: 48
+  breakout_atr_buffer: 0.25
+  confirmation_bars: 2
+  min_confirmations: 1
+  delay_bars: 1
+  propagation_bars: 36
+  require_compression: false
+  min_abs_trend_alignment: 0.75
+  min_range_expansion_ratio: 1.30
+  min_realized_volatility_ratio: 1.30
+  include_existing_breakout_risk: false
+
+search:
+  exact_top_n: 5
+  search_entry_stride_bars: 24
+  max_sample_positions_per_candidate: 30
+
+selection:
+  uses_drawdown: false

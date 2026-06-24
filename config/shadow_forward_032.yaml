@@ -1,0 +1,19 @@
+shadow:
+  name: iteration_032_shadow_forward
+  output_dir: reports/research_iterations/iteration_032_shadow_forward
+  infrastructure_config: config/infrastructure_microstructure.yaml
+  policy_config: config/research_iteration_microstructure_order_policy_017.yaml
+  policy_ablation_dir: reports/research_iterations/iteration_031_execution_policy_ablation
+  conditional_execution_dir: reports/research_iterations/iteration_029b_conditional_execution_measurement
+  execution_surface_dir: reports/research_iterations/iteration_020_execution_surface_017
+  default_policy: maker_entry_add_taker_exit
+  primary_equity_usdt: 10000
+  duration_days: 30
+  min_completed_days_for_verdict: 30
+  min_exact_coverage: 0.80
+  max_collector_age_seconds: 20
+  private_env_vars:
+    - BINANCE_API_KEY
+    - BINANCE_SECRET_KEY
+    - BINANCE_API_SECRET
+  live_trading_env_var: LIVE_TRADING_ENABLED
