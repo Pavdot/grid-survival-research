@@ -31,6 +31,42 @@ services:
       retries: 3
       start_period: 60s
 
+  collector-btcusdt-klines:
+    build: .
+    image: grid-survival-research:latest
+    container_name: grid-survival-collector-btcusdt-klines
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - src.infra.binance_kline_collector
+      - --run
+      - --config
+      - config/shadow_live_037.yaml
+      - --timeframe
+      - 5m
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - src.infra.binance_kline_collector
+        - --healthcheck
+        - --config
+        - config/shadow_live_037.yaml
+        - --timeframe
+        - 5m
+        - --max-age-minutes
+        - "15"
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
   research-runner:
     build: .
     image: grid-survival-research:latest
@@ -112,6 +148,25 @@ services:
       - ./config:/app/config:ro
       - ./data:/app/data
       - ./reports:/app/reports
+
+  shadow-runner-037:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    environment:
+      LIVE_TRADING_ENABLED: ${LIVE_TRADING_ENABLED:-false}
+    command:
+      - python
+      - -m
+      - src.paper.shadow_live_037
+      - --run-once
+      - --config
+      - config/shadow_live_037.yaml
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./research_evidence:/app/research_evidence:ro
 
   report-server:
     build: .

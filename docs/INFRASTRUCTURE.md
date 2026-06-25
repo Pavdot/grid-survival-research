@@ -22,23 +22,38 @@ docker compose build
 docker compose run --rm research-runner python -m pytest -q
 ```
 
-Start the BTCUSDT public market-data collector:
+Start the BTCUSDT public market-data collectors:
 
 ```bash
-docker compose up -d collector-btcusdt-depth
+docker compose up -d collector-btcusdt-depth collector-btcusdt-klines
 docker compose logs -f collector-btcusdt-depth
+docker compose logs -f collector-btcusdt-klines
 ```
 
-The collector writes daily Parquet files under:
+The depth collector writes daily Parquet files under:
 
 ```text
 data/microstructure/ws_depth/btcusdt_depth_YYYY-MM-DD.parquet
 ```
 
-The heartbeat file is:
+The closed-candle collector writes:
+
+```text
+data/live/btcusdt_5m_closed.parquet
+data/live/btcusdt_1h_closed.parquet
+```
+
+Seed the candle collector once before the first shadow run:
+
+```bash
+docker compose run --rm shadow-runner-037 python -m src.infra.binance_kline_collector --seed --timeframe 5m
+```
+
+The heartbeat files are:
 
 ```text
 data/microstructure/ws_depth/btcusdt_collector_health.json
+data/live/btcusdt_kline_health.json
 ```
 
 ## Systemd Autostart
@@ -239,11 +254,43 @@ reports/paper_trading/
 Iteration 027 remains simulation only: no private endpoints, no account access
 and no real orders.
 
+## Shadow Live 037
+
+Run the Iteration 037 zero-fee shadow cycle:
+
+```bash
+docker compose run --rm shadow-runner-037
+```
+
+The runner uses closed 5m candles, reconstructs complete 1h signal candles,
+applies the locked 037 candidate, gates entries with the live depth snapshot and
+writes append-only paper outputs under:
+
+```text
+reports/shadow_live_037/
+```
+
+Key files:
+
+- `shadow_signals.csv`
+- `shadow_orders.csv`
+- `shadow_fills.csv`
+- `shadow_positions.csv`
+- `shadow_daily_pnl.csv`
+- `execution_costs_by_day.csv`
+- `shadow_status.json`
+- `shadow_live_report.md`
+
+The hourly systemd timer runs this shadow cycle after the ops healthcheck. It is
+still paper-only: it refuses private key environment variables and refuses
+`LIVE_TRADING_ENABLED=true`.
+
 ## Guardrails
 
 - No API keys are required by the collector.
 - No private Binance endpoints are used.
 - No live trading code is started by Docker Compose.
+- Shadow live 037 is paper-only and sends no orders.
 - The collector seeds a local order book from REST and then tracks public depth
   updates from WebSocket.
 - Binance WebSocket connections can be rotated by the server around 24 hours;

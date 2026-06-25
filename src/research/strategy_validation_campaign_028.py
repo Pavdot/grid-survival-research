@@ -20,6 +20,11 @@ from src.research.monte_carlo_oos_robustness import (
     run_monte_carlo,
 )
 from src.research.monthly_target_martingale_research import monthly_return_from_equity
+from src.research.overfitting_validation_protocol import (
+    deflated_sharpe_ratio,
+    probability_of_backtest_overfitting,
+    sharpe_score,
+)
 from src.utils.config_loader import load_yaml, project_path
 from src.utils.logging import get_logger
 
@@ -362,6 +367,72 @@ def run_monte_carlo_gate(
     return pd.DataFrame(rows)
 
 
+def run_overfitting_protocol(
+    candidate_matrix: pd.DataFrame,
+    config: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    protocol = config.get("overfitting_protocol", {})
+    if not protocol:
+        return pd.DataFrame(), pd.DataFrame()
+    require_columns(candidate_matrix, ["family", "fold_id", "test_monthly_return"], "candidate_matrix")
+    pivot = candidate_matrix.pivot_table(
+        index="fold_id",
+        columns="family",
+        values="test_monthly_return",
+        aggfunc="first",
+    ).sort_index()
+    pivot = pivot.dropna(axis=0, how="any")
+    families = sorted(candidate_matrix["family"].astype(str).unique().tolist())
+    if pivot.shape[0] < 4 or pivot.shape[1] < 2:
+        rows = [
+            {
+                "family": family,
+                "overfit_available": False,
+                "overfit_pass": False,
+                "overfit_reason": "requires at least 4 folds and 2 families",
+            }
+            for family in families
+        ]
+        return pd.DataFrame(rows), pd.DataFrame()
+
+    pbo_summary, pbo_paths = probability_of_backtest_overfitting(
+        pivot,
+        n_partitions=int(protocol.get("cscv_partitions", 16)),
+        metric=str(protocol.get("pbo_metric", "sharpe")),
+        max_splits=protocol.get("pbo_max_splits"),
+        random_seed=int(protocol.get("random_seed", 42)),
+    )
+    trial_sharpes = pivot.apply(lambda series: sharpe_score(series.to_numpy()) * np.sqrt(12.0), axis=0)
+    max_pbo = float(protocol.get("max_pbo", 0.10))
+    min_dsr = float(protocol.get("min_dsr_statistic", 0.0))
+    rows: list[dict[str, Any]] = []
+    for family in pivot.columns:
+        dsr = deflated_sharpe_ratio(
+            pivot[family].to_numpy(),
+            trial_sharpes.to_numpy(),
+            periods_per_year=float(protocol.get("periods_per_year", 12.0)),
+        )
+        passed = float(pbo_summary["pbo"]) <= max_pbo and float(dsr["dsr_statistic"]) >= min_dsr
+        rows.append(
+            {
+                "family": str(family),
+                "overfit_available": True,
+                "overfit_pass": bool(passed),
+                "pbo": float(pbo_summary["pbo"]),
+                "pbo_logit_median": float(pbo_summary["logit_median"]),
+                "pbo_relative_rank_median": float(pbo_summary["relative_rank_median"]),
+                "pbo_split_count": int(pbo_summary["split_count"]),
+                "dsr_statistic": float(dsr["dsr_statistic"]),
+                "dsr_probability": float(dsr["dsr_probability"]),
+                "candidate_sharpe": float(dsr["candidate_sharpe"]),
+                "expected_max_sharpe": float(dsr["expected_max_sharpe"]),
+                "trial_count": int(dsr["trial_count"]),
+                "overfit_reason": "passed" if passed else "failed PBO/DSR gate",
+            }
+        )
+    return pd.DataFrame(rows), pbo_paths
+
+
 def worst_case_gate(families: list[dict[str, Any]], config: dict[str, Any]) -> pd.DataFrame:
     path = resolve_path(config["execution"]["worst_case_iteration_dir"]) / "scenario_comparison.csv"
     robust = float(config["target"]["robust_monthly_return"])
@@ -480,6 +551,7 @@ def evaluate_finalists(
     worst: pd.DataFrame,
     surface: pd.DataFrame,
     config: dict[str, Any],
+    overfit: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     robust = float(config["target"]["robust_monthly_return"])
     min_improvement = float(config["target"].get("min_improvement_vs_017", 0.0))
@@ -487,6 +559,12 @@ def evaluate_finalists(
     baseline_rows = universe[universe["family"].eq("baseline_017_locked")]
     baseline_monthly = float(baseline_rows.iloc[0]["aggregate_monthly_return"]) if not baseline_rows.empty else 0.0
     final = universe.merge(cpcv, on="family", how="left").merge(mc, on="family", how="left")
+    if overfit is not None and not overfit.empty:
+        final = final.merge(overfit, on="family", how="left")
+    else:
+        final["overfit_available"] = False
+        final["overfit_pass"] = True
+        final["overfit_reason"] = "not configured"
     final = final.merge(worst, on="family", how="left").merge(surface, on="family", how="left")
     final["improvement_vs_017_monthly"] = final["aggregate_monthly_return"].astype(float) - baseline_monthly
     final["wf_pass"] = (
@@ -497,7 +575,7 @@ def evaluate_finalists(
     )
     final["research_pass"] = final["wf_pass"].astype(bool) & final["mc_pass"].fillna(False).astype(bool) & final[
         "cpcv_pass"
-    ].fillna(False).astype(bool)
+    ].fillna(False).astype(bool) & final["overfit_pass"].fillna(False).astype(bool)
     final["execution_pass"] = final["worst_case_pass"].fillna(False).astype(bool) & final[
         "surface_full_zone_pass"
     ].fillna(False).astype(bool)
@@ -548,6 +626,7 @@ def global_decision(finalists: pd.DataFrame) -> str:
 def write_report(output_dir: Path, payload: dict[str, Any]) -> Path:
     finalists = pd.DataFrame(payload["walk_forward_finalist_summary"])
     cpcv_paths = pd.DataFrame(payload["cpcv_selection_paths"])
+    overfit = pd.DataFrame(payload.get("overfit_summary", []))
     report = output_dir / "iteration_report.md"
     lines = [
         "# Iteration 028 - Strategy Validation Campaign 017+",
@@ -566,10 +645,24 @@ def write_report(output_dir: Path, payload: dict[str, Any]) -> Path:
         "wf_pass",
         "mc_pass",
         "cpcv_pass",
+        "overfit_pass",
         "worst_case_pass",
         "surface_full_zone_pass",
     ]
     lines.append(markdown_table(finalists[cols]) if not finalists.empty else "No finalists.")
+    lines.extend(["", "## PBO / DSR Overfit Audit"])
+    overfit_cols = [
+        "family",
+        "overfit_pass",
+        "pbo",
+        "pbo_split_count",
+        "dsr_statistic",
+        "dsr_probability",
+        "candidate_sharpe",
+        "expected_max_sharpe",
+    ]
+    available_cols = [column for column in overfit_cols if column in overfit.columns]
+    lines.append(markdown_table(overfit[available_cols]) if not overfit.empty else "No PBO/DSR audit.")
     lines.extend(["", "## CPCV Selection Paths"])
     path_cols = ["split_id", "selected_family", "train_blocks", "test_blocks", "test_monthly_return", "test_equity_ruined"]
     lines.append(markdown_table(cpcv_paths[path_cols].head(20)) if not cpcv_paths.empty else "No CPCV paths.")
@@ -577,7 +670,7 @@ def write_report(output_dir: Path, payload: dict[str, Any]) -> Path:
         [
             "",
             "## Interpretation",
-            "Iteration 028 is a validation campaign, not a live-trading system. It accepts a candidate only after walk-forward, Monte Carlo, CPCV, worst-case execution and execution-surface checks. A `fragile but promising` result means the research gates passed but execution robustness did not.",
+            "Iteration 028 is a validation campaign, not a live-trading system. It accepts a candidate only after walk-forward, Monte Carlo, CPCV, PBO/DSR false-discovery checks, worst-case execution and execution-surface checks. A `fragile but promising` result means the research gates passed but execution robustness did not.",
         ]
     )
     report.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -614,6 +707,7 @@ def run_campaign(
         )
     universe = pd.DataFrame(universe_rows)
     cpcv_summary, cpcv_paths = run_cpcv(candidate_matrix, config)
+    overfit_summary, pbo_paths = run_overfitting_protocol(candidate_matrix, config)
     mc = run_monte_carlo_gate(
         families,
         config,
@@ -623,7 +717,7 @@ def run_campaign(
     )
     worst = worst_case_gate(families, config)
     surface = execution_surface_gate(families, config)
-    finalists = evaluate_finalists(universe, cpcv_summary, mc, worst, surface, config)
+    finalists = evaluate_finalists(universe, cpcv_summary, mc, worst, surface, config, overfit_summary)
     decision = global_decision(finalists)
     copy_finalist_trades(finalists, families, output_dir)
 
@@ -632,6 +726,8 @@ def run_campaign(
     finalists.to_csv(output_dir / "walk_forward_finalist_summary.csv", index=False)
     cpcv_summary.to_csv(output_dir / "cpcv_summary.csv", index=False)
     cpcv_paths.to_csv(output_dir / "cpcv_selection_paths.csv", index=False)
+    overfit_summary.to_csv(output_dir / "overfit_summary.csv", index=False)
+    pbo_paths.to_csv(output_dir / "pbo_paths.csv", index=False)
     worst.to_csv(output_dir / "worst_case_finalists.csv", index=False)
     surface.to_csv(output_dir / "execution_surface_finalists.csv", index=False)
 
@@ -642,6 +738,8 @@ def run_campaign(
         "walk_forward_finalist_summary": finalists.to_dict("records"),
         "cpcv_summary": cpcv_summary.to_dict("records"),
         "cpcv_selection_paths": cpcv_paths.to_dict("records"),
+        "overfit_summary": overfit_summary.to_dict("records"),
+        "pbo_paths": pbo_paths.to_dict("records"),
         "worst_case_finalists": worst.to_dict("records"),
         "execution_surface_finalists": surface.to_dict("records"),
     }

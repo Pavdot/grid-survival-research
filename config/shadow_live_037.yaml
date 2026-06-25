@@ -1,0 +1,106 @@
+shadow_live:
+  name: shadow_live_037_zero_fee
+  output_dir: reports/shadow_live_037
+  infrastructure_config: config/infrastructure_microstructure.yaml
+  policy_config: config/research_iteration_microstructure_order_policy_017.yaml
+  source_037_dir: research_evidence/surgical_veto_optimizer_037_20260624_152430
+  primary_equity_usdt: 10000
+  account_equity_usdt_grid: [1000, 5000, 10000, 25000]
+  default_policy: maker_entry_add_taker_exit
+  passive_compare_policies:
+    - gate_only_taker
+    - maker_all_non_forced
+  signal_lag_bars: 1
+  mask_lag_bars: 1
+  signal_lookback_bars: 36
+  max_collector_age_seconds: 20
+  max_kline_age_minutes: 15
+  min_kline_coverage_rate: 0.99
+  min_order_snapshot_coverage: 0.80
+  private_env_vars:
+    - BINANCE_API_KEY
+    - BINANCE_SECRET_KEY
+    - BINANCE_API_SECRET
+    - BINANCE_PRIVATE_KEY
+  live_trading_env_var: LIVE_TRADING_ENABLED
+
+kline_collector:
+  name: btcusdt_closed_kline_collector
+  symbol: BTCUSDT
+  interval: 5m
+  rest_base_urls:
+    - https://api.binance.com
+    - https://data-api.binance.vision
+  rest_klines_endpoint: /api/v3/klines
+  rest_limit: 1000
+  timeout_seconds: 10
+  poll_interval_seconds: 60
+  lookback_days: 14
+  output_path: data/live/btcusdt_5m_closed.parquet
+  resampled_1h_path: data/live/btcusdt_1h_closed.parquet
+  health_path: data/live/btcusdt_kline_health.json
+  audit_path: reports/shadow_live_037/kline_data_audit.json
+
+strategy_037:
+  source_dir: research_evidence/surgical_veto_optimizer_037_20260624_152430
+  candidate_name: mean_reversion_dual_hourly_extreme_cool3_rsi24_40_60_sp4p5_tp2_lvl5_base2p5_prog1p55_cap50
+  candidate:
+    name: mean_reversion_dual_hourly_extreme_cool3_rsi24_40_60_sp4p5_tp2_lvl5_base2p5_prog1p55_cap50
+    side_mode: mean_reversion_dual
+    entry_mode: hourly_extreme
+    entry_cooldown_hours: 3.0
+    rsi_window: 24
+    rsi_low: 40.0
+    rsi_high: 60.0
+    spacing_atr_multiplier: 4.5
+    take_profit_spacing_multiplier: 2.0
+    max_levels: 5
+    base_position_size_pct: 2.5
+    progression_multiplier: 1.55
+    max_total_exposure_pct: 50.0
+    fee_rate: 0.0
+    slippage_bps: 0.25
+    max_grid_loss_pct: 0.35
+    max_holding_hours: 6.0
+    stop_on_regime_break: false
+    stop_on_volatility_shock: true
+  veto:
+    veto_uid: veto_none
+    veto_name: veto_none
+    max_grids_per_month: 999.0
+    pause_after_forced_loss_hours: 0.0
+    rolling_7d_loss_threshold: -999.0
+
+fundamental_blackout:
+  enabled: true
+  use_default_seed: true
+  events_path:
+  pre_event_hours: 24
+  post_event_hours: 24
+  surprise_reaction_hours: 48
+  oracle_pre_event_hours: 24
+  min_severity: 4
+  categories:
+    - macro_fomc
+    - macro_cpi
+    - macro_jobs
+    - macro_ppi
+    - crypto_regulatory
+    - exchange_hack
+    - stablecoin_depeg
+    - etf_news
+    - major_liquidation
+    - halving
+
+trend_escape:
+  range_lookback_bars: 48
+  breakout_atr_buffer: 0.25
+  confirmation_bars: 2
+  min_confirmations: 1
+  delay_bars: 1
+  propagation_bars: 36
+  require_compression: false
+  min_abs_trend_alignment: 0.75
+  min_range_expansion_ratio: 1.30
+  min_realized_volatility_ratio: 1.30
+  include_existing_breakout_risk: false

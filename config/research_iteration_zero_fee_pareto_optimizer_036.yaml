@@ -120,6 +120,19 @@ validation:
   min_interesting_median: 0.06
   max_p10_floor: -0.08
   holdout_min_total_return: 0.0
+  overfitting_protocol:
+    reference: ssrn-4686376
+    require_walk_forward: true
+    require_cpcv: true
+    require_pbo: true
+    require_dsr: true
+    cpcv_n_splits: 8
+    cpcv_n_test_groups: 2
+    cpcv_embargo_pct: 0.02
+    cscv_partitions: 16
+    max_pbo: 0.10
+    min_dsr_statistic: 0.0
+    min_cpcv_p25: 0.0
 
 fundamental_blackout:
   enabled: true

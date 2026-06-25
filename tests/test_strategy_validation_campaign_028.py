@@ -13,6 +13,7 @@ from src.research.strategy_validation_campaign_028 import (
     make_cpcv_splits,
     run_campaign,
     run_cpcv,
+    run_overfitting_protocol,
     summarize_fold_subset,
     write_report,
 )
@@ -48,6 +49,13 @@ def cpcv_config() -> dict:
             "min_improvement_vs_017": 0.001,
         },
         "cpcv": {"block_count": 3, "test_block_count": 1, "purge_adjacent_blocks": 0},
+        "overfitting_protocol": {
+            "cscv_partitions": 4,
+            "pbo_metric": "mean",
+            "max_pbo": 0.10,
+            "min_dsr_statistic": 0.0,
+            "periods_per_year": 12,
+        },
     }
 
 
@@ -120,6 +128,48 @@ class StrategyValidationCampaign028Tests(unittest.TestCase):
         self.assertFalse(row["research_pass"])
         self.assertEqual(row["final_verdict"], "research rejected by robustness gates")
 
+    def test_evaluate_finalists_requires_pbo_dsr_gate_when_present(self) -> None:
+        universe = pd.DataFrame(
+            [
+                {
+                    "family": "baseline_017_locked",
+                    "aggregate_monthly_return": 0.13,
+                    "positive_fold_rate": 0.7,
+                    "equity_ruined": False,
+                },
+                {
+                    "family": "candidate",
+                    "aggregate_monthly_return": 0.16,
+                    "positive_fold_rate": 0.8,
+                    "equity_ruined": False,
+                },
+            ]
+        )
+        cpcv = pd.DataFrame([{"family": "candidate", "cpcv_pass": True}])
+        mc = pd.DataFrame([{"family": "candidate", "mc_pass": True}])
+        worst = pd.DataFrame([{"family": "candidate", "worst_case_pass": False}])
+        surface = pd.DataFrame([{"family": "candidate", "surface_full_zone_pass": False}])
+        overfit = pd.DataFrame([{"family": "candidate", "overfit_pass": False}])
+        final = evaluate_finalists(universe, cpcv, mc, worst, surface, cpcv_config(), overfit)
+        row = final[final["family"].eq("candidate")].iloc[0]
+        self.assertTrue(row["wf_pass"])
+        self.assertFalse(row["research_pass"])
+        self.assertEqual(row["final_verdict"], "research rejected by robustness gates")
+
+    def test_run_overfitting_protocol_reports_pbo_and_dsr(self) -> None:
+        matrix = pd.concat(
+            [
+                fold_rows("candidate_a", [0.10, 0.12, 0.11, 0.13, 0.10, 0.12]),
+                fold_rows("candidate_b", [-0.10, -0.12, -0.11, -0.13, -0.10, -0.12]),
+            ],
+            ignore_index=True,
+        )
+        summary, paths = run_overfitting_protocol(matrix, cpcv_config())
+        self.assertFalse(summary.empty)
+        self.assertFalse(paths.empty)
+        self.assertIn("pbo", summary.columns)
+        self.assertIn("dsr_statistic", summary.columns)
+
     def test_report_is_written_even_without_accepted_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir)
@@ -135,6 +185,7 @@ class StrategyValidationCampaign028Tests(unittest.TestCase):
                         "wf_pass": False,
                         "mc_pass": False,
                         "cpcv_pass": False,
+                        "overfit_pass": False,
                         "worst_case_pass": False,
                         "surface_full_zone_pass": False,
                     }

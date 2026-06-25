@@ -8,7 +8,7 @@ Wants=network-online.target
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/opt/grid-survival-research
-ExecStart=/usr/bin/docker compose up -d collector-btcusdt-depth
+ExecStart=/usr/bin/docker compose up -d collector-btcusdt-depth collector-btcusdt-klines
 ExecStop=/usr/bin/docker compose down
 TimeoutStartSec=0
 

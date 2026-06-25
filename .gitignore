@@ -11,6 +11,8 @@ data/raw/*
 !data/raw/.gitkeep
 data/microstructure/*
 !data/microstructure/.gitkeep
+data/live/*
+!data/live/.gitkeep
 data/processed/*
 !data/processed/.gitkeep
 data/features/*
@@ -29,6 +31,8 @@ reports/infra/*
 !reports/infra/.gitkeep
 reports/paper_trading/*
 !reports/paper_trading/.gitkeep
+reports/shadow_live_037/*
+!reports/shadow_live_037/.gitkeep
 research_evidence/*
 !research_evidence/.gitkeep
 backups/*
