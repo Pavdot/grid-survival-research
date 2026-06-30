@@ -60,7 +60,18 @@ class LocalOrderBook:
         final_update = int(event["u"])
         if final_update <= self.last_update_id:
             return False
-        if first_update > self.last_update_id + 1:
+        previous_update = event.get("pu")
+        if previous_update is not None:
+            # USD-M futures depth streams include `pu`, the previous stream
+            # update id. Right after a REST seed, the first valid event may
+            # instead span the REST snapshot id (`U <= lastUpdateId <= u`).
+            if int(previous_update) != self.last_update_id and not (
+                first_update <= self.last_update_id <= final_update
+            ):
+                raise ValueError(
+                    f"Depth stream sequence gap: event pu={previous_update}, local={self.last_update_id}"
+                )
+        elif first_update > self.last_update_id + 1:
             raise ValueError(
                 f"Depth stream sequence gap: event U={first_update}, local={self.last_update_id}"
             )

@@ -70,6 +70,20 @@ class BinanceMicrostructureCollectorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             book.apply_update({"U": 105, "u": 106, "b": [], "a": []})
 
+    def test_futures_previous_update_id_bridges_sequence(self) -> None:
+        book = LocalOrderBook.from_snapshot(snapshot_payload())
+        applied = book.apply_update({"U": 105, "u": 106, "pu": 100, "b": [["99.98", "1.0"]], "a": []})
+        self.assertTrue(applied)
+        self.assertEqual(book.last_update_id, 106)
+        with self.assertRaises(ValueError):
+            book.apply_update({"U": 110, "u": 111, "pu": 105, "b": [], "a": []})
+
+    def test_futures_first_event_can_span_rest_snapshot_id(self) -> None:
+        book = LocalOrderBook.from_snapshot(snapshot_payload())
+        applied = book.apply_update({"U": 95, "u": 105, "pu": 94, "b": [["99.98", "1.0"]], "a": []})
+        self.assertTrue(applied)
+        self.assertEqual(book.last_update_id, 105)
+
     def test_old_update_is_ignored(self) -> None:
         book = LocalOrderBook.from_snapshot(snapshot_payload())
         self.assertFalse(book.apply_update({"U": 90, "u": 95, "b": [["100", "9"]], "a": []}))

@@ -1,0 +1,106 @@
+output:
+  dir: reports/infra/api_connectivity
+
+defaults:
+  symbol: BTCUSDT
+  timeout_seconds: 10
+  websocket_timeout_seconds: 10
+
+venues:
+  spot:
+    enabled: true
+    rest:
+      - name: spot_depth_snapshot
+        base_url: https://api.binance.com
+        endpoint: /api/v3/depth
+        params:
+          symbol: BTCUSDT
+          limit: 1000
+        kind: depth
+      - name: spot_book_ticker
+        base_url: https://api.binance.com
+        endpoint: /api/v3/ticker/bookTicker
+        params:
+          symbol: BTCUSDT
+        kind: book_ticker
+      - name: spot_klines_5m
+        base_url: https://api.binance.com
+        endpoint: /api/v3/klines
+        params:
+          symbol: BTCUSDT
+          interval: 5m
+          limit: 3
+        kind: klines
+    websocket:
+      - name: spot_depth_diff_100ms
+        url: wss://stream.binance.com:9443/ws/btcusdt@depth@100ms
+        required_fields: [e, E, s, U, u, b, a]
+        expected_event: depthUpdate
+      - name: spot_book_ticker
+        url: wss://stream.binance.com:9443/ws/btcusdt@bookTicker
+        required_fields: [u, s, b, B, a, A]
+      - name: spot_agg_trade
+        url: wss://stream.binance.com:9443/ws/btcusdt@aggTrade
+        required_fields: [e, E, s, a, p, q, T, m]
+        expected_event: aggTrade
+      - name: spot_kline_5m
+        url: wss://stream.binance.com:9443/ws/btcusdt@kline_5m
+        required_fields: [e, E, s, k]
+        expected_event: kline
+
+  futures_usdm:
+    enabled: true
+    rest:
+      - name: futures_depth_snapshot
+        base_url: https://fapi.binance.com
+        endpoint: /fapi/v1/depth
+        params:
+          symbol: BTCUSDT
+          limit: 1000
+        kind: depth
+      - name: futures_book_ticker
+        base_url: https://fapi.binance.com
+        endpoint: /fapi/v1/ticker/bookTicker
+        params:
+          symbol: BTCUSDT
+        kind: book_ticker
+      - name: futures_klines_5m
+        base_url: https://fapi.binance.com
+        endpoint: /fapi/v1/klines
+        params:
+          symbol: BTCUSDT
+          interval: 5m
+          limit: 3
+        kind: klines
+      - name: futures_premium_index
+        base_url: https://fapi.binance.com
+        endpoint: /fapi/v1/premiumIndex
+        params:
+          symbol: BTCUSDT
+        kind: premium_index
+    websocket:
+      - name: futures_depth_diff_100ms
+        url: wss://fstream.binance.com/public/ws/btcusdt@depth@100ms
+        required_fields: [e, E, T, s, U, u, b, a]
+        expected_event: depthUpdate
+      - name: futures_book_ticker
+        url: wss://fstream.binance.com/public/ws/btcusdt@bookTicker
+        required_fields: [e, E, T, s, u, b, B, a, A]
+        expected_event: bookTicker
+      - name: futures_agg_trade
+        url: wss://fstream.binance.com/market/ws/btcusdt@aggTrade
+        required_fields: [e, E, s, a, p, q, T, m]
+        expected_event: aggTrade
+      - name: futures_kline_5m
+        url: wss://fstream.binance.com/market/ws/btcusdt@kline_5m
+        required_fields: [e, E, s, k]
+        expected_event: kline
+      - name: futures_mark_price_1s
+        url: wss://fstream.binance.com/market/ws/btcusdt@markPrice@1s
+        required_fields: [e, E, s, p, i, r, T]
+        expected_event: markPriceUpdate
+      - name: futures_force_order_optional
+        url: wss://fstream.binance.com/market/ws/btcusdt@forceOrder
+        required_fields: [e, E, o]
+        expected_event: forceOrder
+        optional_no_event: true

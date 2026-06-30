@@ -67,6 +67,53 @@ services:
       retries: 3
       start_period: 120s
 
+  collector-btcusdt-futures-depth:
+    build: .
+    image: grid-survival-research:latest
+    container_name: grid-survival-collector-btcusdt-futures-depth
+    profiles: ["manual"]
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - src.infra.binance_microstructure_collector
+      - --run
+      - --config
+      - config/infrastructure_microstructure_futures.yaml
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - src.infra.binance_microstructure_collector
+        - --healthcheck
+        - --config
+        - config/infrastructure_microstructure_futures.yaml
+        - --max-age-seconds
+        - "20"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  api-connectivity-check:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    command:
+      - python
+      - -m
+      - src.infra.binance_market_connectivity
+      - --config
+      - config/binance_market_connectivity.yaml
+    volumes:
+      - ./config:/app/config:ro
+      - ./reports:/app/reports
+
   research-runner:
     build: .
     image: grid-survival-research:latest

@@ -1,0 +1,28 @@
+collector:
+  name: btcusdt_futures_depth_collector
+  symbol: BTCUSDT
+  websocket_url: wss://fstream.binance.com/public/ws/btcusdt@depth@100ms
+  rest_base_urls:
+    - https://fapi.binance.com
+  rest_depth_endpoint: /fapi/v1/depth
+  rest_depth_limit: 1000
+  timeout_seconds: 10
+  snapshot_interval_seconds: 1
+  flush_every_rows: 60
+  max_buffered_events: 1000
+  depth_bands_bps: [1, 2, 5, 10]
+  top_levels_to_store: 500
+  output_dir: data/microstructure/futures_ws_depth
+  health_path: data/microstructure/futures_ws_depth/btcusdt_futures_collector_health.json
+  reconnect_backoff_seconds: 5
+  max_snapshot_age_seconds_for_health: 15
+
+quality:
+  output_dir: reports/infra/futures_microstructure_quality
+  expected_interval_seconds: 1
+  gap_warn_seconds: 5
+  stale_bad_seconds: 60
+  min_coverage_ratio_healthy: 0.95
+  min_coverage_ratio_degraded: 0.80
+  max_invalid_fraction_healthy: 0.01
+  max_invalid_fraction_degraded: 0.05
