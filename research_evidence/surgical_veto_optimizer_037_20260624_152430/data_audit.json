@@ -1,27 +1,3 @@
-{
-  "market_5m_path": "C:\\Users\\Utilisateur\\Downloads\\src\\grid-survival-research\\data\\processed\\btcusdt_5m.parquet",
-  "signal_1h_path": "C:\\Users\\Utilisateur\\Downloads\\src\\grid-survival-research\\data\\processed\\btcusdt_1h.parquet",
-  "market_5m_sha256": "73d1d927157a4d779759f78443648a576ca227b1d0627363ff42b41882838891",
-  "signal_1h_sha256": "8652aa3de2701a78d4180d098d984fbe584f67e97b38eab592a350d96bceea0f",
-  "market_5m_size_bytes": 19759895,
-  "signal_1h_size_bytes": 1953676,
-  "market_5m_mtime_utc": "2026-06-12T09:11:06.431988+00:00",
-  "signal_1h_mtime_utc": "2026-06-12T09:11:17.511991+00:00",
-  "market_5m_start_utc": "2024-06-01 00:05:00+00:00",
-  "market_5m_end_utc": "2026-06-11 15:05:00+00:00",
-  "signal_1h_start_utc": "2024-06-01 01:00:00+00:00",
-  "signal_1h_end_utc": "2026-06-11 16:00:00+00:00",
-  "expected_5m_bars": 213301,
-  "observed_5m_bars": 213301,
-  "coverage_rate": 1.0,
-  "gap_count": 0,
-  "duplicate_5m_count": 0,
-  "duplicate_1h_count": 0,
-  "filtered_5m_bars": 213300,
-  "filtered_1h_bars": 17775,
-  "full_signal_hours": 17775,
-  "excluded_incomplete_1h_bars": 1,
-  "excluded_5m_bars_in_incomplete_hours": 1,
-  "last_full_hour_open_utc": "2026-06-11 14:00:00+00:00",
-  "output_dir": "C:\\Users\\Utilisateur\\Downloads\\src\\grid-survival-research\\research_evidence\\surgical_veto_optimizer_037_20260624_152430"
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:3879c5d71bef6f7f7c2c884f73b7d487a9e4ae85f919b81a330a403571143f88
+size 1389
