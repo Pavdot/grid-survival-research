@@ -102,6 +102,39 @@ class BinanceKlineCollectorTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_kline_config(bad)
 
+    def test_futures_public_kline_config_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spot = config(Path(tmpdir))
+            futures = KlineCollectorConfig(
+                **{
+                    **spot.__dict__,
+                    "market": "futures_usdm",
+                    "rest_base_urls": ("https://fapi.binance.com",),
+                    "rest_klines_endpoint": "/fapi/v1/klines",
+                }
+            )
+            validate_kline_config(futures)
+
+    def test_market_endpoint_mismatch_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spot = config(Path(tmpdir))
+            bad = KlineCollectorConfig(
+                **{
+                    **spot.__dict__,
+                    "market": "futures_usdm",
+                    "rest_base_urls": ("https://fapi.binance.com",),
+                }
+            )
+            with self.assertRaises(ValueError):
+                validate_kline_config(bad)
+
+    def test_unapproved_kline_host_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            spot = config(Path(tmpdir))
+            bad = KlineCollectorConfig(**{**spot.__dict__, "rest_base_urls": ("https://example.com",)})
+            with self.assertRaises(ValueError):
+                validate_kline_config(bad)
+
     def test_healthcheck_detects_fresh_and_stale_closed_klines(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = config(Path(tmpdir))

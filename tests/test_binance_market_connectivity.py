@@ -117,6 +117,32 @@ venues:
         self.assertEqual(row["status"], "failed")
         self.assertIn("boom", row["message"])
 
+    def test_optional_websocket_timeout_is_not_a_failure(self) -> None:
+        check = WebSocketCheck(
+            venue="futures_usdm",
+            name="optional_force_order",
+            url="wss://fstream.binance.com/market/ws/btcusdt@forceOrder",
+            required_fields=("e",),
+            expected_event="forceOrder",
+            timeout_seconds=0.01,
+            optional_no_event=True,
+        )
+
+        class FakeWebSocket:
+            def recv(self):
+                import websocket
+
+                raise websocket.WebSocketTimeoutException("timeout")
+
+            def close(self):
+                return None
+
+        with patch("websocket.create_connection", return_value=FakeWebSocket()):
+            from src.infra.binance_market_connectivity import run_websocket_check
+
+            row = run_websocket_check(check)
+        self.assertEqual(row["status"], "no_event")
+
 
 if __name__ == "__main__":
     unittest.main()

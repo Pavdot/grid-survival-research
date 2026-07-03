@@ -19,6 +19,14 @@ from src.utils.logging import get_logger
 
 LOGGER = get_logger(__name__)
 DEFAULT_CONFIG = "config/shadow_live_037.yaml"
+PUBLIC_KLINE_ENDPOINTS = {
+    "spot": "/api/v3/klines",
+    "futures_usdm": "/fapi/v1/klines",
+}
+PUBLIC_KLINE_HOSTS = {
+    "spot": {"api.binance.com", "data-api.binance.vision"},
+    "futures_usdm": {"fapi.binance.com"},
+}
 KLINE_COLUMNS = [
     "open_time",
     "open",
@@ -45,6 +53,7 @@ class KlineCollectorConfig:
     resampled_1h_path: Path
     health_path: Path
     audit_path: Path
+    market: str = "spot"
 
 
 def interval_to_minutes(interval: str) -> int:
@@ -53,8 +62,14 @@ def interval_to_minutes(interval: str) -> int:
     raise ValueError("Only 5m klines are supported for the shadow live pipeline")
 
 
-def kline_config_from_yaml(config: dict[str, Any], timeframe: str | None = None) -> KlineCollectorConfig:
-    raw = config.get("kline_collector", {})
+def kline_config_from_yaml(
+    config: dict[str, Any],
+    timeframe: str | None = None,
+    section: str = "kline_collector",
+) -> KlineCollectorConfig:
+    if section not in config:
+        raise ValueError(f"kline config section is missing: {section}")
+    raw = config[section]
     interval = str(timeframe or raw.get("interval", "5m"))
     return KlineCollectorConfig(
         name=str(raw.get("name", "btcusdt_closed_kline_collector")),
@@ -70,16 +85,25 @@ def kline_config_from_yaml(config: dict[str, Any], timeframe: str | None = None)
         resampled_1h_path=project_path(raw.get("resampled_1h_path", "data/live/btcusdt_1h_closed.parquet")),
         health_path=project_path(raw.get("health_path", "data/live/btcusdt_kline_health.json")),
         audit_path=project_path(raw.get("audit_path", "reports/shadow_live_037/kline_data_audit.json")),
+        market=str(raw.get("market", "spot")),
     )
 
 
 def validate_kline_config(config: KlineCollectorConfig) -> None:
     if config.symbol != config.symbol.upper():
         raise ValueError("kline collector symbol must be uppercase")
+    if config.market not in PUBLIC_KLINE_ENDPOINTS:
+        raise ValueError(f"unsupported public Binance market: {config.market}")
     if "order" in config.rest_klines_endpoint.lower():
         raise ValueError("kline collector must use public market-data endpoints only")
-    if config.rest_klines_endpoint != "/api/v3/klines":
-        raise ValueError("kline collector endpoint must be /api/v3/klines")
+    expected_endpoint = PUBLIC_KLINE_ENDPOINTS[config.market]
+    if config.rest_klines_endpoint != expected_endpoint:
+        raise ValueError(f"{config.market} kline collector endpoint must be {expected_endpoint}")
+    allowed_hosts = PUBLIC_KLINE_HOSTS[config.market]
+    for base_url in config.rest_base_urls:
+        parsed = urllib.parse.urlparse(base_url)
+        if parsed.scheme != "https" or parsed.hostname not in allowed_hosts:
+            raise ValueError(f"unapproved {config.market} public kline base URL: {base_url}")
     if interval_to_minutes(config.interval) != 5:
         raise ValueError("kline collector interval must be 5m")
     if config.rest_limit <= 0 or config.rest_limit > 1000:
@@ -304,6 +328,7 @@ def write_health(config: KlineCollectorConfig, status: str, last_open_time: pd.T
     config.health_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "collector": config.name,
+        "market": config.market,
         "symbol": config.symbol,
         "interval": config.interval,
         "status": status,
@@ -396,8 +421,12 @@ def run_loop(config: KlineCollectorConfig, collect_seconds: float | None = None)
         time.sleep(config.poll_interval_seconds)
 
 
-def load_kline_config(path: str | Path = DEFAULT_CONFIG, timeframe: str | None = None) -> KlineCollectorConfig:
-    config = kline_config_from_yaml(load_yaml(path), timeframe=timeframe)
+def load_kline_config(
+    path: str | Path = DEFAULT_CONFIG,
+    timeframe: str | None = None,
+    section: str = "kline_collector",
+) -> KlineCollectorConfig:
+    config = kline_config_from_yaml(load_yaml(path), timeframe=timeframe, section=section)
     validate_kline_config(config)
     return config
 
@@ -406,6 +435,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Collect closed public Binance BTCUSDT 5m klines.")
     parser.add_argument("--config", default=DEFAULT_CONFIG)
     parser.add_argument("--timeframe", default="5m")
+    parser.add_argument("--section", default="kline_collector")
     parser.add_argument("--seed", action="store_true")
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--collect-seconds", type=float, default=None)
@@ -416,7 +446,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    config = load_kline_config(args.config, timeframe=args.timeframe)
+    config = load_kline_config(args.config, timeframe=args.timeframe, section=args.section)
     if args.healthcheck:
         ok, message = healthcheck(config, max_age_minutes=args.max_age_minutes)
         print(message)

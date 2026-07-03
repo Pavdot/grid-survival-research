@@ -8,5 +8,4 @@ Wants=network-online.target
 Type=oneshot
 WorkingDirectory=/opt/grid-survival-research
 EnvironmentFile=-/etc/grid-survival-research.env
-ExecStart=/usr/bin/docker compose run --rm ops-monitor python -m src.infra.ops_monitor --healthcheck
-ExecStart=/usr/bin/docker compose run --rm shadow-runner-037
+ExecStart=/usr/bin/docker compose run --rm ops-monitor python -m src.infra.ops_monitor --healthcheck --config config/infrastructure_microstructure_futures.yaml

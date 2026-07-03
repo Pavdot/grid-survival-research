@@ -13,7 +13,7 @@ collector:
   depth_bands_bps: [1, 2, 5, 10]
   top_levels_to_store: 500
   output_dir: data/microstructure/futures_ws_depth
-  health_path: data/microstructure/futures_ws_depth/btcusdt_futures_collector_health.json
+  health_path: data/microstructure/futures_ws_depth/runtime/btcusdt_futures_collector_health.json
   reconnect_backoff_seconds: 5
   max_snapshot_age_seconds_for_health: 15
 
@@ -26,3 +26,25 @@ quality:
   min_coverage_ratio_degraded: 0.80
   max_invalid_fraction_healthy: 0.01
   max_invalid_fraction_degraded: 0.05
+
+ops:
+  reports_dir: reports/infra/futures
+  disk_path: .
+  disk_warn_fraction: 0.80
+  max_parquet_age_seconds: 120
+  telegram:
+    enabled: true
+    token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+  backup:
+    enabled: true
+    rclone_remote_env: RCLONE_REMOTE
+    manifest_dir: reports/infra/backups
+    include_paths:
+      - data/microstructure/ws_depth
+      - data/microstructure/futures_ws_depth
+      - data/live/spot
+      - data/live/futures_usdm
+      - data/processed
+      - reports/research_iterations
+      - reports/shadow_live_037

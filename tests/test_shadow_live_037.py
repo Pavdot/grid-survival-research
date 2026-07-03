@@ -13,7 +13,10 @@ from src.paper.shadow_live_037 import (
     latest_actionable_signal,
     locked_candidate,
     open_position_from_signal,
+    shadow_healthcheck,
+    spot_futures_basis_bps,
     update_position_on_closed_bars,
+    validate_fundamental_schedule,
 )
 
 
@@ -121,6 +124,64 @@ class ShadowLive037Tests(unittest.TestCase):
         assert ready is not None
         self.assertEqual(ready["decision_timestamp_utc"], pd.Timestamp("2026-01-01T00:00:00Z").isoformat())
         self.assertEqual(ready["entry_timestamp_utc"], pd.Timestamp("2026-01-01T00:05:00Z").isoformat())
+
+    def test_stale_actionable_signal_is_not_replayed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            market = market_frame()
+            shifted_signal = pd.Series(pd.NA, index=market.index, dtype="object")
+            shifted_signal.iloc[0] = "long"
+            result = latest_actionable_signal(
+                market,
+                shifted_signal,
+                pd.Series(False, index=market.index),
+                pd.Timestamp("2026-01-01T00:20:00Z"),
+                Path(tmpdir),
+                lookback_bars=5,
+                max_entry_delay_seconds=120,
+            )
+        self.assertIsNone(result)
+
+    def test_spot_futures_basis_uses_latest_common_closed_bar(self) -> None:
+        spot = market_frame()
+        futures = market_frame().astype({"close": float})
+        futures.loc[futures.index[-1], "close"] = 100.05
+        self.assertAlmostEqual(spot_futures_basis_bps(spot, futures), 5.0, places=6)
+
+    def test_fundamental_schedule_requires_upcoming_event(self) -> None:
+        config = base_config()
+        config["fundamental_blackout"] = {
+            "use_default_seed": True,
+            "default_seed_profile": "macro_only",
+            "categories": ["macro_cpi"],
+            "min_severity": 4,
+            "require_future_scheduled_event_within_days": 45,
+        }
+        status = validate_fundamental_schedule(config, now=pd.Timestamp("2026-05-01T00:00:00Z"))
+        self.assertEqual(status["next_event_category"], "macro_cpi")
+        with self.assertRaises(ValueError):
+            validate_fundamental_schedule(config, now=pd.Timestamp("2030-01-01T00:00:00Z"))
+
+    def test_shadow_healthcheck_accepts_kill_switch_as_alive(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = base_config(Path(tmpdir))
+            output = Path(config["shadow_live"]["output_dir"])
+            output.mkdir(parents=True)
+            (output / "shadow_status.json").write_text(
+                pd.Series(
+                    {
+                        "checked_at_utc": pd.Timestamp("2026-01-01T00:00:00Z").isoformat(),
+                        "status": "shadow_kill_switch",
+                        "real_order_sent": False,
+                    }
+                ).to_json(),
+                encoding="utf-8",
+            )
+            ok, _message = shadow_healthcheck(
+                config,
+                max_age_seconds=60,
+                now=pd.Timestamp("2026-01-01T00:00:30Z"),
+            )
+        self.assertTrue(ok)
 
     def test_open_position_records_no_real_order_and_locked_candidate(self) -> None:
         config = base_config()

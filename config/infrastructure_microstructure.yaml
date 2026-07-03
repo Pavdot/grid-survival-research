@@ -14,7 +14,7 @@ collector:
   depth_bands_bps: [1, 2, 5, 10]
   top_levels_to_store: 500
   output_dir: data/microstructure/ws_depth
-  health_path: data/microstructure/ws_depth/btcusdt_collector_health.json
+  health_path: data/microstructure/ws_depth/runtime/btcusdt_collector_health.json
   reconnect_backoff_seconds: 5
   max_snapshot_age_seconds_for_health: 15
 

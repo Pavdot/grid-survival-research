@@ -150,6 +150,30 @@ class BinanceMicrostructureCollectorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_collector_config(bad)
 
+    def test_futures_public_depth_config_is_allowed(self) -> None:
+        config = collector_config()
+        futures = CollectorConfig(
+            **{
+                **config.__dict__,
+                "websocket_url": "wss://fstream.binance.com/public/ws/btcusdt@depth@100ms",
+                "rest_base_urls": ("https://fapi.binance.com",),
+                "rest_depth_endpoint": "/fapi/v1/depth",
+            }
+        )
+        validate_collector_config(futures)
+
+    def test_futures_depth_rejects_spot_host(self) -> None:
+        config = collector_config()
+        bad = CollectorConfig(
+            **{
+                **config.__dict__,
+                "websocket_url": "wss://fstream.binance.com/public/ws/btcusdt@depth@100ms",
+                "rest_depth_endpoint": "/fapi/v1/depth",
+            }
+        )
+        with self.assertRaises(ValueError):
+            validate_collector_config(bad)
+
 
 if __name__ == "__main__":
     unittest.main()

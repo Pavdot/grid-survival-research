@@ -1,5 +1,5 @@
 output:
-  dir: reports/infra/api_connectivity
+  dir: reports/infra/runtime/api_connectivity
 
 defaults:
   symbol: BTCUSDT

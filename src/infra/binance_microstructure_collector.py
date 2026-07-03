@@ -137,6 +137,20 @@ def validate_collector_config(config: CollectorConfig) -> None:
         raise ValueError("collector must use public market-data endpoints only")
     if not config.websocket_url.startswith("wss://"):
         raise ValueError("collector.websocket_url must be a secure websocket URL")
+    rest_hosts = {urllib.parse.urlparse(url).hostname for url in config.rest_base_urls}
+    websocket_host = urllib.parse.urlparse(config.websocket_url).hostname
+    if config.rest_depth_endpoint == "/api/v3/depth":
+        if not rest_hosts.issubset({"api.binance.com", "data-api.binance.vision"}):
+            raise ValueError("spot depth collector uses an unapproved REST host")
+        if websocket_host not in {"stream.binance.com", "data-stream.binance.vision"}:
+            raise ValueError("spot depth collector uses an unapproved WebSocket host")
+    elif config.rest_depth_endpoint == "/fapi/v1/depth":
+        if rest_hosts != {"fapi.binance.com"}:
+            raise ValueError("USD-M Futures depth collector must use fapi.binance.com")
+        if websocket_host != "fstream.binance.com":
+            raise ValueError("USD-M Futures depth collector must use fstream.binance.com")
+    else:
+        raise ValueError(f"unsupported public depth endpoint: {config.rest_depth_endpoint}")
     if config.rest_depth_limit <= 0 or config.rest_depth_limit > 5000:
         raise ValueError("collector.rest_depth_limit must stay within (0, 5000]")
     if config.snapshot_interval_seconds <= 0:

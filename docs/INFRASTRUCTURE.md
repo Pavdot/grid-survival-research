@@ -18,43 +18,65 @@ sudo mkdir -p /opt/grid-survival-research
 sudo chown "$USER:$USER" /opt/grid-survival-research
 git clone https://github.com/Pavdot/grid-survival-research.git /opt/grid-survival-research
 cd /opt/grid-survival-research
+git lfs install
+git lfs pull
 docker compose build
 docker compose run --rm research-runner python -m pytest -q
 ```
 
-Start the BTCUSDT public market-data collectors:
+Run the online readiness check, then start the complete core stack:
 
 ```bash
-docker compose up -d collector-btcusdt-depth collector-btcusdt-klines
-docker compose logs -f collector-btcusdt-depth
-docker compose logs -f collector-btcusdt-klines
+docker compose run --rm shadow-037-preflight
+docker compose up -d
+docker compose ps
+docker compose logs -f shadow-runner-037
 ```
+
+The default stack contains Spot closed candles for the strategy signal,
+USD-M Futures closed candles for paper position monitoring, USD-M Futures
+depth for the execution gate, and the continuous 037 shadow runner. Spot depth
+is diagnostic-only and can be enabled with `--profile diagnostics`.
 
 The depth collector writes daily Parquet files under:
 
 ```text
-data/microstructure/ws_depth/btcusdt_depth_YYYY-MM-DD.parquet
+data/microstructure/futures_ws_depth/btcusdt_depth_YYYY-MM-DD.parquet
 ```
 
 The closed-candle collector writes:
 
 ```text
-data/live/btcusdt_5m_closed.parquet
-data/live/btcusdt_1h_closed.parquet
+data/live/spot/btcusdt_5m_closed.parquet
+data/live/spot/btcusdt_1h_closed.parquet
+data/live/futures_usdm/btcusdt_5m_closed.parquet
+data/live/futures_usdm/btcusdt_1h_closed.parquet
 ```
 
 Seed the candle collector once before the first shadow run:
 
 ```bash
-docker compose run --rm shadow-runner-037 python -m src.infra.binance_kline_collector --seed --timeframe 5m
+docker compose run --rm collector-btcusdt-klines python -m src.infra.binance_kline_collector --seed --timeframe 5m
+docker compose run --rm collector-btcusdt-futures-klines python -m src.infra.binance_kline_collector --seed --section execution_kline_collector --timeframe 5m
 ```
 
 The heartbeat files are:
 
 ```text
-data/microstructure/ws_depth/btcusdt_collector_health.json
-data/live/btcusdt_kline_health.json
+data/microstructure/futures_ws_depth/runtime/btcusdt_futures_collector_health.json
+data/live/spot/btcusdt_kline_health.json
+data/live/futures_usdm/btcusdt_kline_health.json
+reports/shadow_live_037/runtime/shadow_status.json
 ```
+
+For a one-command Ubuntu 24.04 installation after cloning into `/opt`:
+
+```bash
+sudo bash deploy/bootstrap_ubuntu_24_04.sh
+```
+
+The script installs Docker Compose v2, Git LFS and chrony, validates public API
+connectivity, installs systemd units and starts the paper-only stack.
 
 ## Systemd Autostart
 
@@ -76,10 +98,10 @@ The service expects the repo at `/opt/grid-survival-research`. Edit
 Manual healthcheck:
 
 ```bash
-docker compose exec collector-btcusdt-depth \
+docker compose exec collector-btcusdt-futures-depth \
   python -m src.infra.binance_microstructure_collector \
   --healthcheck \
-  --config config/infrastructure_microstructure.yaml \
+  --config config/infrastructure_microstructure_futures.yaml \
   --max-age-seconds 20
 ```
 
@@ -89,7 +111,7 @@ snapshot was written and the heartbeat status is `running`.
 Ops healthcheck with disk/parquet checks:
 
 ```bash
-docker compose run --rm ops-monitor python -m src.infra.ops_monitor --healthcheck
+docker compose run --rm ops-monitor python -m src.infra.ops_monitor --healthcheck --config config/infrastructure_microstructure_futures.yaml
 ```
 
 Telegram test alert:
@@ -154,7 +176,7 @@ docker compose --profile manual up -d report-server
 Open:
 
 ```text
-http://SERVER_IP:8000/infra/microstructure_quality/
+http://127.0.0.1:8000/infra/futures_microstructure_quality/
 ```
 
 The DQ module reports expected versus received snapshots, time gaps, stale
@@ -175,8 +197,11 @@ Then open:
 http://SERVER_IP:8000/
 ```
 
-If the VPS is public, firewall port `8000` or tunnel it over SSH instead of
-exposing it to the internet.
+The report server binds to localhost. Use an SSH tunnel rather than exposing it:
+
+```bash
+ssh -L 8000:127.0.0.1:8000 user@SERVER_IP
+```
 
 ## Backups
 
@@ -234,7 +259,9 @@ sudo systemctl enable --now grid-survival-daily.timer
 ```
 
 The hourly timer checks collector/parquet freshness and disk usage. The daily
-timer runs DQ, rolling execution evaluation, daily ops report and rclone backup.
+timer runs Futures DQ, writes the shadow daily report and ops report, then runs
+the rclone backup. The legacy 017 rolling evaluation remains a manual research
+job because it uses the diagnostic Spot-depth dataset.
 
 ## Paper-Only Harness
 
@@ -259,7 +286,7 @@ and no real orders.
 Run the Iteration 037 zero-fee shadow cycle:
 
 ```bash
-docker compose run --rm shadow-runner-037
+docker compose exec shadow-runner-037 python -m src.paper.shadow_live_037 --healthcheck
 ```
 
 The runner uses closed 5m candles, reconstructs complete 1h signal candles,
@@ -267,7 +294,7 @@ applies the locked 037 candidate, gates entries with the live depth snapshot and
 writes append-only paper outputs under:
 
 ```text
-reports/shadow_live_037/
+reports/shadow_live_037/runtime/
 ```
 
 Key files:
@@ -281,15 +308,28 @@ Key files:
 - `shadow_status.json`
 - `shadow_live_report.md`
 
-The hourly systemd timer runs this shadow cycle after the ops healthcheck. It is
-still paper-only: it refuses private key environment variables and refuses
-`LIVE_TRADING_ENABLED=true`.
+The shadow service runs a cycle every 30 seconds so 5m adds, take profits and
+forced exits are not monitored only once per hour. The hourly timer performs
+ops checks; it does not duplicate the shadow process. It remains paper-only and
+refuses private key environment variables or `LIVE_TRADING_ENABLED=true`.
+
+## Fundamental Calendar
+
+`config/fundamental_events_live.csv` contains the official scheduled FOMC,
+CPI, PPI and US employment releases through December 2026. The shadow runner
+fails closed if it cannot find an eligible scheduled event within the next 45
+days. Refresh this file from the official Fed and BLS calendars before that
+horizon expires. Unexpected news cannot be known before publication; the live
+trend-escape guard remains the protection for those events.
 
 ## Guardrails
 
 - No API keys are required by the collector.
 - No private Binance endpoints are used.
 - No live trading code is started by Docker Compose.
+- Signal candles are Spot; paper execution candles and depth are USD-M Futures.
+- A signal older than 120 seconds is never replayed with a current book.
+- Spot/Futures basis above 10 bps blocks new paper entries.
 - Shadow live 037 is paper-only and sends no orders.
 - The collector seeds a local order book from REST and then tracks public depth
   updates from WebSocket.

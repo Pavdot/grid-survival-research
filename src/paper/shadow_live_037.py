@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from src.fundamentals.event_blackout import build_blackout_bundle
+from src.fundamentals.event_blackout import build_blackout_bundle, load_fundamental_events
 from src.infra.binance_kline_collector import (
     audit_kline_frame,
     load_kline_frame,
@@ -119,16 +120,78 @@ def build_live_market_features(frame: pd.DataFrame) -> pd.DataFrame:
     return market
 
 
-def load_live_market(config: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+def load_live_market_section(
+    config: dict[str, Any],
+    section: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     shadow = config["shadow_live"]
-    kline_path = project_path(config["kline_collector"]["output_path"])
-    kline_1h_path = project_path(config["kline_collector"]["resampled_1h_path"])
+    raw = config[section]
+    kline_path = project_path(raw["output_path"])
+    kline_1h_path = project_path(raw["resampled_1h_path"])
     frame = load_kline_frame(kline_path)
     min_coverage = float(shadow.get("min_kline_coverage_rate", 0.99))
     audit = audit_kline_frame(frame, kline_path, min_coverage=min_coverage)
     signal_1h = resample_closed_1h_from_5m(frame)
     write_kline_frame(signal_1h, kline_1h_path)
     return build_live_market_features(frame), signal_1h, audit
+
+
+def load_live_market(config: dict[str, Any]) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
+    return load_live_market_section(config, "kline_collector")
+
+
+def spot_futures_basis_bps(signal_market: pd.DataFrame, execution_market: pd.DataFrame) -> float:
+    common = signal_market.index.intersection(execution_market.index)
+    if common.empty:
+        raise ValueError("spot and futures closed-kline feeds have no common timestamp")
+    timestamp = common.max()
+    spot = float(signal_market.loc[timestamp, "close"])
+    futures = float(execution_market.loc[timestamp, "close"])
+    if spot <= 0 or futures <= 0:
+        raise ValueError("spot and futures closes must be positive")
+    return float((futures / spot - 1.0) * 10000.0)
+
+
+def load_live_markets(
+    config: dict[str, Any],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict[str, Any], dict[str, Any], float]:
+    signal_market, signal_1h, signal_audit = load_live_market_section(config, "kline_collector")
+    execution_section = "execution_kline_collector" if "execution_kline_collector" in config else "kline_collector"
+    execution_market, _execution_1h, execution_audit = load_live_market_section(config, execution_section)
+    basis_bps = spot_futures_basis_bps(signal_market, execution_market)
+    return signal_market, execution_market, signal_1h, signal_audit, execution_audit, basis_bps
+
+
+def validate_fundamental_schedule(
+    config: dict[str, Any],
+    now: pd.Timestamp | None = None,
+) -> dict[str, Any]:
+    now = pd.Timestamp(now or pd.Timestamp.now(tz="UTC")).tz_convert("UTC")
+    blackout = config.get("fundamental_blackout", {})
+    horizon_days = float(blackout.get("require_future_scheduled_event_within_days", 45))
+    events = load_fundamental_events(config)
+    categories = set(str(value) for value in blackout.get("categories", []))
+    min_severity = int(blackout.get("min_severity", 1))
+    eligible = events[
+        events["is_scheduled"].astype(bool)
+        & events["severity"].astype(int).ge(min_severity)
+        & (events["event_time_utc"] >= now)
+    ].copy()
+    if categories:
+        eligible = eligible[eligible["category"].astype(str).isin(categories)]
+    deadline = now + pd.Timedelta(days=horizon_days)
+    covered = eligible[eligible["event_time_utc"] <= deadline]
+    if covered.empty:
+        raise ValueError(f"no eligible scheduled fundamental event within {horizon_days:g} days")
+    next_event = covered.sort_values("event_time_utc").iloc[0]
+    return {
+        "event_count": int(len(events)),
+        "eligible_future_event_count": int(len(eligible)),
+        "next_event_time_utc": pd.Timestamp(next_event["event_time_utc"]).isoformat(),
+        "next_event_category": str(next_event["category"]),
+        "next_event_title": str(next_event["title"]),
+        "coverage_horizon_days": horizon_days,
+    }
 
 
 def build_entry_mask(market: pd.DataFrame, config: dict[str, Any]) -> pd.Series:
@@ -165,13 +228,14 @@ def latest_actionable_signal(
     now: pd.Timestamp,
     output_dir: Path,
     lookback_bars: int,
+    max_entry_delay_seconds: float | None = None,
 ) -> dict[str, Any] | None:
     if market.empty:
         return None
     now = pd.Timestamp(now).tz_convert("UTC")
     keys = processed_signal_keys(output_dir)
     index = market.index[-int(lookback_bars) :]
-    for decision_ts in index:
+    for decision_ts in reversed(index):
         side = shifted_signal.get(decision_ts)
         if side not in ACTIONABLE_SIDES:
             continue
@@ -184,6 +248,9 @@ def latest_actionable_signal(
             raise ValueError("shadow signal cannot enter on the same bar")
         if now < entry_ts:
             continue
+        entry_delay_seconds = float((now - entry_ts) / pd.Timedelta(seconds=1))
+        if max_entry_delay_seconds is not None and entry_delay_seconds > float(max_entry_delay_seconds):
+            continue
         signal_key = f"{pd.Timestamp(entry_ts).isoformat()}|{side}"
         if signal_key in keys:
             continue
@@ -195,6 +262,7 @@ def latest_actionable_signal(
             "side": str(side),
             "entry_blocked_by_mask": mask_value,
             "signal_lag_bars": int((entry_ts - decision_ts) / pd.Timedelta(minutes=5)),
+            "entry_delay_seconds": entry_delay_seconds,
         }
     return None
 
@@ -576,27 +644,49 @@ def run_shadow_once(config: dict[str, Any]) -> dict[str, Any]:
     }
 
     try:
-        market, signal_1h, kline_audit = load_live_market(config)
-        status["kline_quality"] = kline_audit["status"]
-        status["kline_coverage_rate"] = kline_audit.get("coverage_rate")
+        signal_market, execution_market, signal_1h, signal_audit, execution_audit, basis_bps = load_live_markets(config)
+        status["kline_quality"] = signal_audit["status"]
+        status["kline_coverage_rate"] = signal_audit.get("coverage_rate")
+        status["execution_kline_quality"] = execution_audit["status"]
+        status["execution_kline_coverage_rate"] = execution_audit.get("coverage_rate")
+        status["spot_futures_basis_bps"] = basis_bps
         latest_kline_age_minutes = (
-            (now - pd.Timestamp(market.index.max())) / pd.Timedelta(minutes=1)
-            if not market.empty
+            (now - pd.Timestamp(signal_market.index.max())) / pd.Timedelta(minutes=1)
+            if not signal_market.empty
+            else float("inf")
+        )
+        latest_execution_kline_age_minutes = (
+            (now - pd.Timestamp(execution_market.index.max())) / pd.Timedelta(minutes=1)
+            if not execution_market.empty
             else float("inf")
         )
         status["latest_kline_age_minutes"] = float(latest_kline_age_minutes)
-        if kline_audit["status"] == "bad":
+        status["latest_execution_kline_age_minutes"] = float(latest_execution_kline_age_minutes)
+        if signal_audit["status"] == "bad" or execution_audit["status"] == "bad":
             status["status"] = "shadow_kill_switch"
             status["reason"] = "bad_kline_quality"
-        elif latest_kline_age_minutes > float(shadow.get("max_kline_age_minutes", 15)):
+        elif max(latest_kline_age_minutes, latest_execution_kline_age_minutes) > float(shadow.get("max_kline_age_minutes", 15)):
             status["status"] = "shadow_kill_switch"
             status["reason"] = "stale_kline_data"
+        elif abs(basis_bps) > float(shadow.get("max_abs_spot_futures_basis_bps", 10)):
+            status["status"] = "shadow_kill_switch"
+            status["reason"] = "spot_futures_basis_out_of_bounds"
     except Exception as exc:  # noqa: BLE001 - status file should explain failure.
         status["status"] = "shadow_kill_switch"
         status["reason"] = "kline_load_failed"
         status["error"] = str(exc)
-        market = pd.DataFrame()
+        signal_market = pd.DataFrame()
+        execution_market = pd.DataFrame()
         signal_1h = pd.DataFrame()
+
+    try:
+        schedule_status = validate_fundamental_schedule(config, now=now)
+        status["fundamental_schedule"] = schedule_status
+    except Exception as exc:  # noqa: BLE001 - fail closed when the calendar is not maintained.
+        status["fundamental_schedule"] = {"error": str(exc)}
+        if status["status"] == "shadow_ready":
+            status["status"] = "shadow_kill_switch"
+            status["reason"] = "fundamental_schedule_invalid"
 
     infra_config = load_yaml(shadow["infrastructure_config"])
     collector = collector_config_from_yaml(infra_config)
@@ -607,9 +697,22 @@ def run_shadow_once(config: dict[str, Any]) -> dict[str, Any]:
         status["status"] = "shadow_kill_switch"
         status["reason"] = "stale_or_unhealthy_collector"
 
-    entry_mask = pd.Series(False, index=market.index, dtype=bool) if market.empty else build_entry_mask(market, config)
-    _events, _windows, blackout_masks = build_blackout_bundle(market.index, config) if not market.empty else (pd.DataFrame(), pd.DataFrame(), {"realistic": pd.Series(dtype=bool)})
-    positions, position_orders, position_fills = update_open_positions(output_dir, market, config, blackout_masks.get("realistic", pd.Series(False, index=market.index)))
+    entry_mask = (
+        pd.Series(False, index=signal_market.index, dtype=bool)
+        if signal_market.empty
+        else build_entry_mask(signal_market, config)
+    )
+    _events, _windows, blackout_masks = (
+        build_blackout_bundle(execution_market.index, config)
+        if not execution_market.empty
+        else (pd.DataFrame(), pd.DataFrame(), {"realistic": pd.Series(dtype=bool)})
+    )
+    positions, position_orders, position_fills = update_open_positions(
+        output_dir,
+        execution_market,
+        config,
+        blackout_masks.get("realistic", pd.Series(False, index=execution_market.index)),
+    )
     status["open_positions"] = current_open_count(positions)
     if not positions.empty:
         positions.to_csv(output_dir / "shadow_positions.csv", index=False)
@@ -621,9 +724,9 @@ def run_shadow_once(config: dict[str, Any]) -> dict[str, Any]:
     signal_rows: list[dict[str, Any]] = []
     order_rows = pd.DataFrame()
     fill_rows = pd.DataFrame()
-    if status["status"] == "shadow_ready" and current_open_count(positions) == 0 and not market.empty and not signal_1h.empty:
+    if status["status"] == "shadow_ready" and current_open_count(positions) == 0 and not signal_market.empty and not signal_1h.empty:
         shifted_signal, shifted_mask = shifted_signal_and_mask(
-            market,
+            signal_market,
             signal_1h,
             candidate,
             entry_mask,
@@ -631,12 +734,13 @@ def run_shadow_once(config: dict[str, Any]) -> dict[str, Any]:
             int(shadow.get("mask_lag_bars", 1)),
         )
         signal = latest_actionable_signal(
-            market,
+            signal_market,
             shifted_signal,
             shifted_mask,
             now,
             output_dir,
             int(shadow.get("signal_lookback_bars", 36)),
+            float(shadow.get("max_entry_delay_seconds", 120)),
         )
         if signal is not None:
             status["latest_signal_side"] = signal["side"]
@@ -658,19 +762,31 @@ def run_shadow_once(config: dict[str, Any]) -> dict[str, Any]:
                     notional = equity * float(candidate.base_position_size_pct)
                     snapshot_time = pd.Timestamp(snapshot["snapshot_time_utc"])
                     snapshot_age_ms = abs((now - snapshot_time) / pd.Timedelta(milliseconds=1))
-                    gate_result = evaluate_order_gate(
-                        snapshot,
-                        order_action_for_side(signal["side"], "entry"),
-                        equity,
-                        notional,
-                        gate,
-                        policy.max_total_book_share,
-                        snapshot_age_ms=snapshot_age_ms,
-                    )
+                    scheduled_entry_time = pd.Timestamp(signal["entry_timestamp_utc"])
+                    if snapshot_time < scheduled_entry_time:
+                        status["status"] = "entries_blocked"
+                        status["reason"] = "snapshot_precedes_scheduled_entry"
+                        gate_result = {"authorized": False, "reasons": "snapshot_precedes_scheduled_entry"}
+                    else:
+                        gate_result = evaluate_order_gate(
+                            snapshot,
+                            order_action_for_side(signal["side"], "entry"),
+                            equity,
+                            notional,
+                            gate,
+                            policy.max_total_book_share,
+                            snapshot_age_ms=snapshot_age_ms,
+                        )
                     status["entry_authorized"] = bool(gate_result["authorized"])
                     status["entry_gate_reasons"] = gate_result.get("reasons", "")
                     if bool(gate_result["authorized"]):
-                        position, order_rows, fill_rows = open_position_from_signal(signal, market, snapshot, config, gate_result)
+                        position, order_rows, fill_rows = open_position_from_signal(
+                            signal,
+                            execution_market,
+                            snapshot,
+                            config,
+                            gate_result,
+                        )
                         positions = merge_positions(output_dir, [position])
                         positions.to_csv(output_dir / "shadow_positions.csv", index=False)
                         append_csv(output_dir / "shadow_orders.csv", order_rows)
@@ -719,10 +835,58 @@ def run_shadow_once(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def shadow_healthcheck(
+    config: dict[str, Any],
+    max_age_seconds: float = 120,
+    now: pd.Timestamp | None = None,
+) -> tuple[bool, str]:
+    output_dir = project_path(config["shadow_live"].get("output_dir", "reports/shadow_live_037"))
+    status_path = output_dir / "shadow_status.json"
+    if not status_path.exists():
+        return False, f"shadow status file missing: {status_path}"
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return False, f"invalid shadow status json: {exc}"
+    if bool(payload.get("real_order_sent", False)):
+        return False, "shadow safety violation: real_order_sent is true"
+    checked_at = payload.get("checked_at_utc")
+    if not checked_at:
+        return False, "shadow status has no checked_at_utc"
+    now = pd.Timestamp(now or pd.Timestamp.now(tz="UTC")).tz_convert("UTC")
+    age_seconds = float((now - pd.Timestamp(checked_at)) / pd.Timedelta(seconds=1))
+    if age_seconds > float(max_age_seconds):
+        return False, f"shadow cycle is stale: {age_seconds:.1f}s > {max_age_seconds:.1f}s"
+    return True, f"shadow runner alive; state={payload.get('status', 'unknown')}"
+
+
+def run_shadow_loop(
+    config: dict[str, Any],
+    interval_seconds: float | None = None,
+    collect_seconds: float | None = None,
+) -> None:
+    assert_shadow_safe(config)
+    interval = float(interval_seconds or config["shadow_live"].get("cycle_interval_seconds", 30))
+    if interval <= 0:
+        raise ValueError("shadow cycle interval must be positive")
+    deadline = time.monotonic() + float(collect_seconds) if collect_seconds is not None else None
+    while True:
+        payload = run_shadow_once(config)
+        print(json.dumps(payload, default=str), flush=True)
+        if deadline is not None and time.monotonic() >= deadline:
+            return
+        time.sleep(interval)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run 037 shadow-live paper-only checks.")
     parser.add_argument("--config", default=DEFAULT_CONFIG)
     parser.add_argument("--run-once", action="store_true")
+    parser.add_argument("--run", action="store_true")
+    parser.add_argument("--interval-seconds", type=float, default=None)
+    parser.add_argument("--collect-seconds", type=float, default=None)
+    parser.add_argument("--healthcheck", action="store_true")
+    parser.add_argument("--max-age-seconds", type=float, default=120)
     parser.add_argument("--daily-report", action="store_true")
     return parser.parse_args()
 
@@ -730,13 +894,20 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     config = load_shadow_live_config(args.config)
+    if args.healthcheck:
+        ok, message = shadow_healthcheck(config, max_age_seconds=args.max_age_seconds)
+        print(message)
+        raise SystemExit(0 if ok else 1)
     if args.daily_report:
         output_dir = project_path(config["shadow_live"].get("output_dir", "reports/shadow_live_037"))
         write_daily_outputs(output_dir)
         print(json.dumps({"daily_report": str(output_dir / "shadow_daily_pnl.csv")}, indent=2))
         return
+    if args.run:
+        run_shadow_loop(config, interval_seconds=args.interval_seconds, collect_seconds=args.collect_seconds)
+        return
     if not args.run_once:
-        raise SystemExit("Choose --run-once or --daily-report")
+        raise SystemExit("Choose --run, --run-once, --healthcheck, or --daily-report")
     payload = run_shadow_once(config)
     print(json.dumps(payload, indent=2, default=str))
 

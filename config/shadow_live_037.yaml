@@ -1,7 +1,7 @@
 shadow_live:
   name: shadow_live_037_zero_fee
-  output_dir: reports/shadow_live_037
-  infrastructure_config: config/infrastructure_microstructure.yaml
+  output_dir: reports/shadow_live_037/runtime
+  infrastructure_config: config/infrastructure_microstructure_futures.yaml
   policy_config: config/research_iteration_microstructure_order_policy_017.yaml
   source_037_dir: research_evidence/surgical_veto_optimizer_037_20260624_152430
   primary_equity_usdt: 10000
@@ -15,6 +15,9 @@ shadow_live:
   signal_lookback_bars: 36
   max_collector_age_seconds: 20
   max_kline_age_minutes: 15
+  max_entry_delay_seconds: 120
+  cycle_interval_seconds: 30
+  max_abs_spot_futures_basis_bps: 10
   min_kline_coverage_rate: 0.99
   min_order_snapshot_coverage: 0.80
   private_env_vars:
@@ -25,7 +28,8 @@ shadow_live:
   live_trading_env_var: LIVE_TRADING_ENABLED
 
 kline_collector:
-  name: btcusdt_closed_kline_collector
+  name: btcusdt_spot_closed_kline_collector
+  market: spot
   symbol: BTCUSDT
   interval: 5m
   rest_base_urls:
@@ -36,10 +40,27 @@ kline_collector:
   timeout_seconds: 10
   poll_interval_seconds: 60
   lookback_days: 14
-  output_path: data/live/btcusdt_5m_closed.parquet
-  resampled_1h_path: data/live/btcusdt_1h_closed.parquet
-  health_path: data/live/btcusdt_kline_health.json
-  audit_path: reports/shadow_live_037/kline_data_audit.json
+  output_path: data/live/spot/btcusdt_5m_closed.parquet
+  resampled_1h_path: data/live/spot/btcusdt_1h_closed.parquet
+  health_path: data/live/spot/btcusdt_kline_health.json
+  audit_path: reports/shadow_live_037/runtime/spot_kline_data_audit.json
+
+execution_kline_collector:
+  name: btcusdt_futures_closed_kline_collector
+  market: futures_usdm
+  symbol: BTCUSDT
+  interval: 5m
+  rest_base_urls:
+    - https://fapi.binance.com
+  rest_klines_endpoint: /fapi/v1/klines
+  rest_limit: 1000
+  timeout_seconds: 10
+  poll_interval_seconds: 60
+  lookback_days: 14
+  output_path: data/live/futures_usdm/btcusdt_5m_closed.parquet
+  resampled_1h_path: data/live/futures_usdm/btcusdt_1h_closed.parquet
+  health_path: data/live/futures_usdm/btcusdt_kline_health.json
+  audit_path: reports/shadow_live_037/runtime/futures_kline_data_audit.json
 
 strategy_037:
   source_dir: research_evidence/surgical_veto_optimizer_037_20260624_152430
@@ -73,8 +94,9 @@ strategy_037:
 
 fundamental_blackout:
   enabled: true
-  use_default_seed: true
-  events_path:
+  use_default_seed: false
+  events_path: config/fundamental_events_live.csv
+  require_future_scheduled_event_within_days: 45
   pre_event_hours: 24
   post_event_hours: 24
   surprise_reaction_hours: 48
@@ -85,12 +107,6 @@ fundamental_blackout:
     - macro_cpi
     - macro_jobs
     - macro_ppi
-    - crypto_regulatory
-    - exchange_hack
-    - stablecoin_depeg
-    - etf_news
-    - major_liquidation
-    - halving
 
 trend_escape:
   range_lookback_bars: 48

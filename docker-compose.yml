@@ -3,6 +3,7 @@ services:
     build: .
     image: grid-survival-research:latest
     container_name: grid-survival-collector-btcusdt-depth
+    profiles: ["diagnostics"]
     restart: unless-stopped
     command:
       - python
@@ -67,11 +68,50 @@ services:
       retries: 3
       start_period: 120s
 
+  collector-btcusdt-futures-klines:
+    build: .
+    image: grid-survival-research:latest
+    container_name: grid-survival-collector-btcusdt-futures-klines
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - src.infra.binance_kline_collector
+      - --run
+      - --config
+      - config/shadow_live_037.yaml
+      - --section
+      - execution_kline_collector
+      - --timeframe
+      - 5m
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - src.infra.binance_kline_collector
+        - --healthcheck
+        - --config
+        - config/shadow_live_037.yaml
+        - --section
+        - execution_kline_collector
+        - --timeframe
+        - 5m
+        - --max-age-minutes
+        - "15"
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
   collector-btcusdt-futures-depth:
     build: .
     image: grid-survival-research:latest
     container_name: grid-survival-collector-btcusdt-futures-depth
-    profiles: ["manual"]
     restart: unless-stopped
     command:
       - python
@@ -114,6 +154,23 @@ services:
       - ./config:/app/config:ro
       - ./reports:/app/reports
 
+  shadow-037-preflight:
+    build: .
+    image: grid-survival-research:latest
+    profiles: ["manual"]
+    command:
+      - python
+      - -m
+      - src.infra.shadow_037_preflight
+      - --config
+      - config/shadow_live_037.yaml
+      - --online
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      - ./reports:/app/reports
+      - ./research_evidence:/app/research_evidence:ro
+
   research-runner:
     build: .
     image: grid-survival-research:latest
@@ -141,6 +198,8 @@ services:
       - -m
       - src.infra.ops_monitor
       - --healthcheck
+      - --config
+      - config/infrastructure_microstructure_futures.yaml
     volumes:
       - ./config:/app/config:ro
       - ./data:/app/data
@@ -175,6 +234,8 @@ services:
       - src.infra.microstructure_quality_report
       - --days
       - "7"
+      - --config
+      - config/infrastructure_microstructure_futures.yaml
     volumes:
       - ./config:/app/config:ro
       - ./data:/app/data
@@ -199,14 +260,22 @@ services:
   shadow-runner-037:
     build: .
     image: grid-survival-research:latest
-    profiles: ["manual"]
+    container_name: grid-survival-shadow-runner-037
+    restart: unless-stopped
+    depends_on:
+      collector-btcusdt-klines:
+        condition: service_healthy
+      collector-btcusdt-futures-klines:
+        condition: service_healthy
+      collector-btcusdt-futures-depth:
+        condition: service_healthy
     environment:
       LIVE_TRADING_ENABLED: ${LIVE_TRADING_ENABLED:-false}
     command:
       - python
       - -m
       - src.paper.shadow_live_037
-      - --run-once
+      - --run
       - --config
       - config/shadow_live_037.yaml
     volumes:
@@ -214,6 +283,21 @@ services:
       - ./data:/app/data
       - ./reports:/app/reports
       - ./research_evidence:/app/research_evidence:ro
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -m
+        - src.paper.shadow_live_037
+        - --healthcheck
+        - --config
+        - config/shadow_live_037.yaml
+        - --max-age-seconds
+        - "120"
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
 
   report-server:
     build: .
@@ -227,6 +311,6 @@ services:
       - --directory
       - reports
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./reports:/app/reports:ro

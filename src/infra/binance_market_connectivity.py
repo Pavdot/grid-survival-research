@@ -291,7 +291,7 @@ def run_websocket_check(check: WebSocketCheck) -> dict[str, Any]:
         while time.monotonic() < deadline:
             try:
                 raw = ws.recv()
-            except TimeoutError:
+            except (TimeoutError, websocket.WebSocketTimeoutException):
                 continue
             if not raw:
                 continue

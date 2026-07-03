@@ -92,12 +92,13 @@ is ignored by Git except for the directory placeholder.
 
 ## Research Infrastructure
 
-The repo includes a Docker Compose setup for research-only BTCUSDT
-microstructure collection and evaluation. It collects public Binance market data
-only; it does not place orders and does not use API keys.
+The repo includes a Docker Compose setup for continuous paper-only BTCUSDT 037
+validation. Signals use public Spot candles while simulated execution uses
+public USD-M Futures candles and depth. It never places orders or uses API keys.
 
 ```bash
-docker compose up -d collector-btcusdt-depth
+docker compose run --rm shadow-037-preflight
+docker compose up -d
 docker compose run --rm research-runner python -m src.research.microstructure_order_policy_017 --evaluate-policies
 docker compose run --rm quality-dashboard
 docker compose run --rm daily-evaluation
@@ -114,8 +115,8 @@ python -m src.research.rolling_execution_evaluation --smoke
 python -m src.paper.paper_trading_harness --run-once
 ```
 
-See `docs/INFRASTRUCTURE.md` for VPS deployment, healthchecks, backups, and
-systemd autostart.
+See `docs/INFRASTRUCTURE.md` for the Ubuntu 24.04 bootstrap, healthchecks,
+backups, continuous shadow 037 runner, and systemd autostart.
 
 ## Outputs
 
